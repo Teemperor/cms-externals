@@ -1,0 +1,36 @@
+Input files from Pythia8165 + Tauola++ v1.1.4 + Photos++ v3.54
+Sample size: 10Mevents Z, 10MEvents W+ W- pair,
+Equal BR for tau -> e, mu, pi, rho
+
+Genereated 6.Feb.2014
+
+Pythia configuration:
+-----------------------
+PartonLevel:FSR = off
+
+WeakDoubleBoson:ffbar2WW = on
+24:onMode = off
+24:onIfAny = 15
+24:mMax    = 125
+
+WeakSingleBoson:ffbar2gmZ = on
+23:onMode = off
+23:onIfAny = 15
+23:mMin    = 88
+23:mMax    = 94
+
+pythia.init( 2212, 2212, 8000.0);
+
+Tauola and Photos configuration:
+--------------------------------
+Tauola::setRadiation(false);
+
+Photos::setExponentiation(true);
+Photos::suppressAll(true);
+Photos::forceBremForDecay(2,23,15,-15);
+Photos::forceBremForDecay(2,-24,15,-16);
+Photos::forceBremForDecay(2,24,-15,16);
+Photos::createHistoryEntries(true,3);
+
+--
+Fits performed using ROOT v5.34/14, RooFit v3.59

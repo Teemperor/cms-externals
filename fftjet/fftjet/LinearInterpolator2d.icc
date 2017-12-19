@@ -1,0 +1,45 @@
+#include <cassert>
+
+namespace fftjet {
+    template <typename Real>
+    LinearInterpolator2d::LinearInterpolator2d(
+        const Real* idata,
+        const unsigned inxpoints, const double ixmin, const double ixmax,
+        const unsigned inypoints, const double iymin, const double iymax,
+        const double ifOutside, const bool iuseFOutside)
+        : cdf(0),
+          nxpoints(inxpoints),
+          nypoints(inypoints),
+          xmin(ixmin),
+          xbinwidth((ixmax - ixmin)/inxpoints),
+          ymin(iymin),
+          ybinwidth((iymax - iymin)/inypoints),
+          fOutside(ifOutside),
+          useFOutside(iuseFOutside)
+    {
+        assert(nxpoints > 1);
+        assert(nypoints > 1);
+        assert(ixmin < ixmax);
+        assert(iymin < iymax);
+
+        const unsigned npoints = nxpoints*nypoints;
+        data = new double[npoints];
+        if (idata)
+            for (unsigned i=0; i<npoints; ++i)
+                data[i] = static_cast<double>(idata[i]);
+        else
+            for (unsigned i=0; i<npoints; ++i)
+                data[i] = 0.0;
+    }
+
+    template <typename Real>
+    void LinearInterpolator2d::setData(const Real* newdata)
+    {
+        assert(newdata);
+        const unsigned npoints = nxpoints*nypoints;
+        for (unsigned i=0; i<npoints; ++i)
+            data[i] = static_cast<double>(newdata[i]);
+        delete [] cdf;
+        cdf = 0;
+    }
+}

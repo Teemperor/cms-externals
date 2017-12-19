@@ -1,0 +1,184 @@
+namespace fftjet {
+    template<typename T, unsigned Len>
+    inline T* SmallVector<T,Len>::makeBuffer(unsigned sizeNeeded)
+    {
+        if (sizeNeeded > Len)
+            return new T[sizeNeeded];
+        else
+            return localData_;
+    }
+
+    template<typename T, unsigned Len>
+    inline SmallVector<T,Len>::SmallVector()
+        : data_(localData_),
+          capacity_(Len),
+          size_(0)
+    {
+        assert(capacity_);
+    }
+
+    template<typename T, unsigned Len>
+    SmallVector<T,Len>::SmallVector(const SmallVector& r)
+        : capacity_(r.size_ > Len ? r.size_ : Len),
+          size_(r.size_)
+    {
+        data_ = makeBuffer(r.size_);
+        for (unsigned i=0; i<size_; ++i)
+            data_[i] = r.data_[i];
+    }
+
+    template<typename T, unsigned Len>
+    template<unsigned Len2>
+    SmallVector<T,Len>::SmallVector(const SmallVector<T,Len2>& r)
+        : capacity_(r.size_ > Len ? r.size_ : Len),
+          size_(r.size_)
+    {
+        data_ = makeBuffer(r.size_);
+        for (unsigned i=0; i<size_; ++i)
+            data_[i] = r.data_[i];
+    }
+
+    template<typename T, unsigned Len>
+    inline SmallVector<T,Len>::~SmallVector()
+    {
+        if (data_ != localData_)
+            delete [] data_;
+    }
+
+    template<typename T, unsigned Len>
+    SmallVector<T,Len>& SmallVector<T,Len>::operator=(const SmallVector& r)
+    {
+        if (this == &r)
+            return *this;
+        if (data_ != localData_)
+            delete [] data_;
+        capacity_ = r.size_ > Len ? r.size_ : Len;
+        size_ = r.size_;
+        data_ = makeBuffer(r.size_);
+        for (unsigned i=0; i<size_; ++i)
+            data_[i] = r.data_[i];
+        return *this;
+    }
+
+    template<typename T, unsigned Len>
+    template <unsigned Len2>
+    SmallVector<T,Len>& SmallVector<T,Len>::operator=(
+        const SmallVector<T,Len2>& r)
+    {
+        if (data_ != localData_)
+            delete [] data_;
+        capacity_ = r.size_ > Len ? r.size_ : Len;
+        size_ = r.size_;
+        data_ = makeBuffer(r.size_);
+        for (unsigned i=0; i<size_; ++i)
+            data_[i] = r.data_[i];
+        return *this;
+    }
+
+    template<typename T, unsigned Len>
+    template <unsigned Len2>
+    bool SmallVector<T,Len>::operator==(const SmallVector<T,Len2>& r) const
+    {
+        if (size_ != r.size_)
+            return false;
+        for (unsigned i=0; i<size_; ++i)
+            if (!(data_[i] == r.data_[i]))
+                return false;
+        return true;
+    }
+
+    template<typename T, unsigned Len>
+    void SmallVector<T,Len>::reserve(const unsigned nElements)
+    {
+        if (nElements > capacity_)
+        {
+            T* newdata = new T[nElements];
+            for (unsigned i=0; i<size_; ++i)
+                newdata[i] = data_[i];
+            if (data_ != localData_)
+                delete [] data_;
+            data_ = newdata;
+            capacity_ = nElements;
+        }
+    }
+
+    template<typename T, unsigned Len>
+    inline void SmallVector<T,Len>::push_back(const T& elem)
+    {
+        if (size_ == capacity_)
+            reserve(2*capacity_);
+        data_[size_++] = elem;
+    }
+
+    template<typename T, unsigned Len>
+    inline void SmallVector<T,Len>::clear()
+    {
+        size_ = 0;
+    }
+
+    template<typename T, unsigned Len>
+    inline void SmallVector<T,Len>::resize(const unsigned nElements)
+    {
+        reserve(nElements);
+        size_ = nElements;
+    }
+
+    template<typename T, unsigned Len>
+    inline SmallVector<T,Len>::SmallVector(const unsigned nElements)
+        : data_(localData_),
+          capacity_(Len),
+          size_(0)
+    {
+        assert(capacity_);
+        resize(nElements);
+    }
+
+    template<typename T, unsigned Len>
+    unsigned SmallVector<T,Len>::find(const T& elem) const
+    {
+        unsigned i=0;
+        for (; i<size_; ++i)
+            if (data_[i] == elem)
+                break;
+        return i;
+    }
+
+    template<typename T, unsigned Len>
+    void SmallVector<T,Len>::erase(const unsigned position)
+    {
+        assert(position < size_);
+        if (position != --size_)
+            for (unsigned i=position; i<size_; ++i)
+                data_[i] = data_[i+1];
+    }
+
+    template<typename T, unsigned Len>
+    void SmallVector<T,Len>::insert(const unsigned position, const T& elem)
+    {
+        assert(position <= size_);
+        if (position == size_)
+            push_back(elem);
+        else
+        {
+            if (size_ == capacity_)
+            {
+                const unsigned nElements = 2*capacity_;
+                T* newdata = new T[nElements];
+                for (unsigned i=0; i<size_; ++i)
+                    newdata[i + (i < position ? 0U : 1U)] = data_[i];
+                newdata[position] = elem;
+                if (data_ != localData_)
+                    delete [] data_;
+                data_ = newdata;
+                capacity_ = nElements;
+            }
+            else
+            {
+                for (unsigned i=size_; i>position; --i)
+                    data_[i] = data_[i-1];
+                data_[position] = elem;
+            }
+            ++size_;
+        }
+    }
+}

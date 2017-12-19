@@ -1,0 +1,66 @@
+#include <cassert>
+
+namespace fftjet {
+    template<typename Real, typename Complex>
+    SequentialConvolver<Real, Complex>::SequentialConvolver(
+        const AbsFFTEngine<Real,Complex>* etaEngine,
+        const AbsFFTEngine<Real,Complex>* phiEngine,
+        const AbsKernel1d* ietaKernel,
+        const AbsKernel1d* iphiKernel,
+        const std::vector<double>& phiScales,
+        const unsigned minEtaBin, const unsigned maxEtaBin,
+        const bool fixEfficiency)
+        : AbsSequentialConvolver<Real, Complex>(
+            etaEngine, phiEngine, phiScales,
+            minEtaBin, maxEtaBin, fixEfficiency),
+          etaKernel(ietaKernel),
+          phiKernel(iphiKernel)
+    {
+        assert(etaKernel);
+        assert(phiKernel);
+    }
+
+    template<typename Real, typename Complex>
+    KernelData<Real,Complex>
+    SequentialConvolver<Real, Complex>::buildImage(
+        double scale, const AbsFFTEngine<Real,Complex>* engine,
+        const AbsKernel1d* kernel,
+        unsigned minFixBin, unsigned maxFixBin)
+    {
+        const unsigned nbins = engine->nPhi();
+        Real* tempBuffer = new Real[nbins];
+        Complex* imageBuf = engine->allocateComplex();
+        assert(imageBuf);        
+
+        // Note that the "scanFFT" function by default normalizes
+        // the scan in such a way that its area is 1. This is not
+        // what we need -- instead, we want the raw sum of values
+        // to be 1. Therefore, normalizedArea = sum*binArea = binArea.
+        const double binArea = 2.0*M_PI/nbins;
+        const double area = kernel->scanFFT(tempBuffer, nbins,
+                                            scale, binArea);
+        engine->transformForward(tempBuffer, imageBuf);
+        Real* norm = 0;
+        if (maxFixBin > minFixBin)
+            norm = AbsSequentialConvolver<Real, Complex>::buildEffNorm(
+                tempBuffer, nbins);
+        return KernelData<Real,Complex>(tempBuffer, imageBuf, norm, area);
+    }
+
+    template<typename Real, typename Complex>
+    KernelData<Real,Complex>
+    SequentialConvolver<Real, Complex>::buildKernelImageEta(
+        double scale, const AbsFFTEngine<Real,Complex>* engine,
+        unsigned minFixBin, unsigned maxFixBin)
+    {
+        return buildImage(scale, engine, etaKernel, minFixBin, maxFixBin);
+    }
+
+    template<typename Real, typename Complex>
+    KernelData<Real,Complex>
+    SequentialConvolver<Real, Complex>::buildKernelImagePhi(
+        double scale, const AbsFFTEngine<Real,Complex>* engine)
+    {
+        return buildImage(scale, engine, phiKernel, 0U, 0U);
+    }
+}

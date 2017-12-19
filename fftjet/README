@@ -1,0 +1,16 @@
+
+This is the README file for the FFTJet package. The main purpose of
+this package is reconstruction of particle jets in High Energy Physics
+collider data using a two-step approach: first, pattern recognition is
+performed, possibly using multiple resolution scales in the eta-phi
+space, and then jet energies are reconstructed using preclusters found
+during the pattern recognition stage. The code is capable of very
+efficient searching for jet-like structures in the event energy flow
+pattern. It presents the results using a hierarchical clustering
+tree convenient for subsequent signal/background discrimination
+studies.
+
+The INSTALL file describes a typical installation procedure for the
+package. The code documentation can be found in the "doc" directory,
+the user manual is in the file "fftjet_manual.pdf".
+

@@ -1,0 +1,222 @@
+#include <cfloat>
+#include <cmath>
+#include <cassert>
+
+#include "fftjet/interpolate.hh"
+
+namespace fftjet {
+    template <typename FragmentationFunction>
+    MagneticSmearingKernel<FragmentationFunction>::MagneticSmearingKernel(
+        const FragmentationFunction* fcn, const double numeratorConst,
+        const double charge1Fraction, const double charge2Fraction,
+        const unsigned samplesPerBin, const bool objectOwnsFcn)
+        : fcn_(fcn),
+          numeratorConst_(fabs(numeratorConst)),
+          charge0Fraction_(1.0 - charge1Fraction - charge2Fraction),
+          charge1Fraction_(charge1Fraction),
+          charge2Fraction_(charge2Fraction),
+          samplesPerBin_(samplesPerBin),
+          objectOwnsFcn_(objectOwnsFcn),
+          randomizer_(0)
+    {
+        assert(fcn_);
+        assert(charge0Fraction_ >= 0.0 && charge0Fraction_ <= 1.0);
+        assert(charge1Fraction_ >= 0.0 && charge1Fraction_ <= 1.0);
+        assert(charge2Fraction_ >= 0.0 && charge2Fraction_ <= 1.0);
+        assert(samplesPerBin_);
+    }
+
+    template <typename FragmentationFunction>
+    MagneticSmearingKernel<FragmentationFunction>::~MagneticSmearingKernel()
+    {
+        delete randomizer_;
+        if (objectOwnsFcn_)
+            delete fcn_;
+    }
+
+    template <typename FragmentationFunction>
+    double MagneticSmearingKernel<FragmentationFunction>::phiFcn(
+        const double iphi, const double scale) const
+    {
+        // Assume symmetric distribution
+        const double phi(fabs(iphi));
+        const double pt = 1.0/scale;
+
+        double binSum = 0.0;
+        if (phi < M_PI/2.0)
+        {
+            const double sphi = sin(phi);
+
+            // Case |Z| == 1
+            if (charge1Fraction_ > 0.0)
+            {
+                const double c = numeratorConst_;
+                const double phi_pt = c/sphi;
+                const double x = phi_pt/pt;
+                if (x < 1.0)
+                    binSum += charge1Fraction_*x*x*(*fcn_)(x)*
+                        sqrt((phi_pt - c)*(phi_pt + c))/c;
+            }
+
+            // Case |Z| == 2
+            if (charge2Fraction_ > 0.0)
+            {
+                const double c = 2.0*numeratorConst_;
+                const double phi_pt = c/sphi;
+                const double x = phi_pt/pt;
+                if (x < 1.0)
+                    binSum += charge2Fraction_*x*x*(*fcn_)(x)*
+                        sqrt((phi_pt - c)*(phi_pt + c))/c;
+            }
+        }
+
+        // Divide by 2 because we have folded phi
+        return binSum/2.0;
+    }
+
+    template <typename FragmentationFunction>
+    void MagneticSmearingKernel<FragmentationFunction>::phiSupport(
+        double, double *phimin, double *phimax) const
+    {
+        *phimin = -M_PI/2.0;
+        *phimax = M_PI/2.0;
+    }
+
+    template <typename FragmentationFunction>
+    double MagneticSmearingKernel<FragmentationFunction>::deltaFunAverage(
+        const double x, const double y,
+        const double dx, const double dy) const
+    {
+        const double halfx(fabs(dx/2.0));
+        if (x - halfx <= 0.0 && x + halfx > 0.0)
+        {
+            const double halfy(fabs(dy/2.0));
+            if (y - halfy <= 0.0 && y + halfy > 0.0)
+                return 1.0/dx/dy;
+        }
+        return 0.0;
+    }
+
+    template <typename FragmentationFunction>
+    double MagneticSmearingKernel<FragmentationFunction>::rectangleAverage(
+        const double x, const double y, const double scale,
+        const double dx, const double dy) const
+    {
+        if (numeratorConst_ == 0.0)
+        {
+            // The case of 0 magnetic field.
+            // This turns into a delta function.
+            return deltaFunAverage(x, y, dx, dy);
+        }
+        else
+        {
+            const double halfx(fabs(dx/2.0));
+            if (x - halfx <= 0.0 && x + halfx > 0.0)
+            {
+                double sum = 0.0;
+
+                // Calculate the contribution from charged particles
+                if (charge1Fraction_ || charge2Fraction_)
+                {
+                    const double step = dy/samplesPerBin_;
+                    const double ymin = y - dy/2.0;
+                    for (unsigned i=0; i<samplesPerBin_; ++i)
+                        sum += phiFcn(ymin + (i+0.5)*step, scale);
+                    sum /= (samplesPerBin_*dx);
+                }
+
+                // Add the contribution from neutral particles
+                const double halfy(fabs(dy/2.0));
+                if (y - halfy <= 0.0 && y + halfy > 0.0)
+                    sum += charge0Fraction_/dx/dy;
+
+                return sum;
+            }
+            else
+                return 0.0;
+        }
+    }
+
+    template <typename FragmentationFunction>
+    void MagneticSmearingKernel<FragmentationFunction>::buildRandomizer()
+    {
+        assert(randomizer_ == 0);
+        const unsigned npoints = 1000*samplesPerBin_;
+        double *scan = new double[npoints];
+        for (unsigned i=0; i<npoints; ++i)
+        {
+            const double x = (i + 0.5)/npoints;
+            scan[i] = x*(*fcn_)(x);
+        }
+        randomizer_ = new LinearInterpolator1d(scan, npoints, 0.0, 1.0);
+        delete [] scan;
+    }
+
+    template <typename FragmentationFunction>
+    double MagneticSmearingKernel<FragmentationFunction>::phiRandom(
+        const double rnd, const double scale) const
+    {
+        assert(scale > 0.0);
+        assert(rnd >= 0.0 && rnd <= 1.0);
+        if (numeratorConst_ == 0.0 || charge0Fraction_ == 1.0)
+            return 0.0;
+        else
+        {
+            const double partonPt = 1.0/scale;
+            if (randomizer_ == 0)
+                const_cast<MagneticSmearingKernel*>(this)->buildRandomizer();
+
+            // The charged jet fraction changes as a function of momentum.
+            // Figure out the correct charged fraction.
+            const double cdf1 = randomizer_->getCdf(numeratorConst_/partonPt);
+            const double newFrac1 = 1.0 - cdf1;
+            const double cdf2 = randomizer_->getCdf(2.0*numeratorConst_/partonPt);
+            const double newFrac2 = 1.0 - cdf2;
+
+            // Have no idea what to do if nothing reaches the calorimeter
+            assert(charge0Fraction_ || newFrac1 || newFrac2);
+
+            // Renormalize the fractions
+            const double fracsum = charge0Fraction_ + 
+                                   charge1Fraction_*newFrac1 +
+                                   charge2Fraction_*newFrac2;
+            const double f0 = charge0Fraction_/fracsum;
+            const double f1 = charge1Fraction_*newFrac1/fracsum;
+
+            // See what kind of particle we need to generate
+            double dr, numc, cdfch;
+            if (rnd <= f0)
+            {
+                // Neutral
+                return 0.0;
+            }
+            else if (rnd <= f0 + f1)
+            {
+                // Charge 1
+                dr = lin_interpolate_1d(f0, f0 + f1, 0, 1, rnd);
+                numc = numeratorConst_;
+                cdfch = cdf1;
+            }
+            else
+            {
+                // Charge 2
+                dr = lin_interpolate_1d(f0 + f1, 1, 0, 1, rnd);
+                numc = 2.0*numeratorConst_;
+                cdfch = cdf2;
+            }
+            const int sign = dr >= 0.5 ? 1 : -1;
+            if (sign > 0)
+                dr = 2.0*dr - 1.0;
+            else
+                dr = 1.0 - dr*2.0;
+            const double mapped = lin_interpolate_1d(0, 1, cdfch, 1, dr);
+            const double x = randomizer_->random(mapped);
+            dr = numc/(x*partonPt);
+            if (dr < 1.0)
+                dr = asin(dr);
+            else
+                dr = M_PI/2.0;
+            return sign*dr;
+        }
+    }
+}

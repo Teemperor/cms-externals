@@ -1,0 +1,7 @@
+This directory contains all rootfiles used to produce plots for the publication.
+
+Executing 'make' will invoke ROOT to run the scripts 'PlotFigN.C' (N=1,2,3,4,5)
+ reproducing figures 1-5 from the paper.
+
+--
+Last modified: Z. Was 6.II.2014

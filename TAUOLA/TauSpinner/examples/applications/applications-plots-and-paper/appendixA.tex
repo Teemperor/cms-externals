@@ -1,0 +1,342 @@
+\setcounter{figure}{0}
+
+% This line will make figures have number A.1, A.2, etc.
+\renewcommand\thefigure{\thesection.\arabic{figure}}
+
+\section{Benchmark results}\label{sec:OutputTest} 
+
+The Appendix A with its subsections represents output%
+\footnote{ Text is adopted for the sake of paper preparation in 
+a minor way only.}
+from a single execution of {\tt applications-plots.exe} program.
+The numerical results of the Appendix  are obtained  
+from the  events file  generated 
+ by run of {\tt Pythia8} combined  with {\tt Tauola++}, details of initialization  
+are given later in the Appendix. 
+For the fits,  all 100 bins except 
+the first five in $\tau \to l \nu_l \nu_\tau $ case  and first one in $\tau \to \pi \nu$ case, were used\footnotemark[18].
+\footnotetext[18]{If bremsstrahlung in $\tau$ decays would be present, the result of the fits would differ.
+For example, for leptonic channel (see Fig.3), the shift of $\sim$0.07 would be present.}
+%For the plots, neighboring bins were
+%combined. 
+
+
+The figures in the main part of our 
+paper are taken from the ones of Appendices, with somewhat improved graphic style 
+for better readability. 
+%In particular, 
+%figures \ref{Fig:spectra} and \ref{Fig:scattergams} have been taken from present Appendix. 
+For the plots of Fig.~1,  the bottom-left plots 
+ Figs.~\ref{Fig:spectra1},~\ref{Fig:spectra2}~and~\ref{Fig:spectra3}, were selected.
+The lego plot (and visible mass plots) of Fig.~2 are shown as the top-left lego plots (and mid-right plots)
+of Figs.~\ref{Fig:spectra2}~and~\ref{Fig:scattergrams2} respectively.
+
+
+
+%For the plots in the main text of the paper,   
+%modifications to improve presentation were introduced.
+
+ 
+\subsection{Input files} \label{Sec:InputFiles}
+The list of files and additional information on generation of events 
+used for the plots: 
+{\small \verbinput{input-file-info.txt} }
+
+\vspace{1\baselineskip}
+
+\noindent
+Configuration file used by the program:
+
+\vspace{1\baselineskip}
+
+{\small \verbinput{input-config-file.txt} }
+
+\noindent
+Configuration file used by the fitting program:
+
+\vspace{1\baselineskip}
+
+{\small \verbinput{fit-config-file.txt} }
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% W
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+\subsection{W decays}\label{Sec:W}
+The invariant mass distribution and break-down on the $\tau$ decay channels are shown
+for $\tau \nu_\tau$-pair originating from $W$ decay. The spin effects should not depend on the virtuality of the
+$W$ intermediate state, but this may be not the case if New Physics samples are studied.
+\vskip 3 mm
+
+\begin{figure}[h!]
+\centering 
+\resizebox*{0.45\textwidth}{!}{\includegraphics{\przedro W_mass.eps}} \\
+\caption{ Invariant mass distribution of $\tau \nu_\tau$-pair originating from $W$ decay.}
+\end{figure}
+
+{\small \verbinput{input-W-event-count.txt} }
+\newpage
+
+\subsubsection{ The energy spectrum: $\tau^\pm \to \mu^\pm, e^\pm$}
+\vspace{1\baselineskip}
+
+\begin{figure}[h!]
+\centering 
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h1_020.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h1_021.eps}} \\
+\caption{ Fraction of $\tau$ energy carried by its visible  decay products%
+$^{18}$. 
+\textcolor{red}{Red line} is for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified}.
+}
+\end{figure}
+
+
+%\newpage
+\subsubsection{ The energy spectrum: $\tau^\pm \to \pi^\pm$}
+\vspace{1\baselineskip}
+
+\begin{figure}[h!]
+\centering 
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h1_120.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h1_121.eps}} \\
+\caption{  Fraction of $\tau$ energy carried by its visible  decay products$^{18}$.
+\textcolor{red}{Red line} is for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified}.
+}
+\end{figure}
+
+\newpage
+\subsubsection{ The energy spectrum: $\tau^\pm \to \rho^\pm$}
+\vspace{1\baselineskip}
+
+\begin{figure}[h!]
+\centering 
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h1_220.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h1_221.eps}} \\
+\caption{Fraction of $\tau$ energy carried by its visible  decay products.
+\textcolor{red}{Red line} is  for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified}.
+}
+\end{figure}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Z
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+
+\subsection{Z decays}\label{Sec:Z}
+
+The invariant mass distribution and break-down on the $\tau$ decay channels are shown
+for $\tau \tau$-pair originating from $Z$ decay.
+The spin effects strongly depend on the virtuality of the
+$Z/\gamma^*$ intermediate state. Events were generated explicitly requiring virtuality
+of $Z\gamma^*$ within 88-94 GeV window. Minor 
+contamination from some other process is nevertheless observed (we have not traced it back).
+\vskip 3 mm
+
+\begin{figure}[h!]
+\centering 
+\resizebox*{0.45\textwidth}{!}{\includegraphics{\przedro Z_mass.eps}} \\
+\end{figure}
+
+{\small \verbinput{input-Z-event-count.txt} }
+
+\newpage
+\subsubsection{The energy spectrum: $\tau^- \to \mu^-, e^-$ {\tt vs } $\tau^+ \to \mu^+, e^+$}
+\vspace{3\baselineskip}
+
+\begin{figure}[h!]
+\centering
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_000.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_001.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_002.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_000_vis_mass.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_000_projectionX.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_000_projectionY.eps}} \\
+\caption{ \small Fractions of  $\tau^+$ and $\tau^-$ energies carried by their visible  decay products:
+two dimensional lego plots and one dimensional spectra$^{18}$.
+\textcolor{red}{Red line} is  for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified} with whenever available superimposed result for the
+fitted functions.
+}\label{Fig:spectra1}
+\end{figure}
+
+\newpage
+\subsubsection{The energy spectrum: $\tau^- \to \mu^-, e^-$ {\tt vs } $\tau^+ \to \pi^+$}
+\vspace{3\baselineskip}
+
+\begin{figure}[h!]
+\centering
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_100.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_101.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_102.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_100_vis_mass.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_100_projectionX.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_100_projectionY.eps}} \\
+\caption{\small Fractions of  $\tau^+$ and $\tau^-$ energies carried by their visible  decay products:
+two dimensional lego plots and one dimensional spectra$^{18}$.
+\textcolor{red}{Red line} is  for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified} with whenever available superimposed result for the
+fitted functions.
+}
+\end{figure}
+
+\newpage
+\subsubsection{The energy spectrum: $\tau^- \to \pi^-$ {\tt vs } $\tau^+ \to \mu^+, e^+$}
+\vspace{3\baselineskip}
+
+\begin{figure}[h!]
+\centering
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_200.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_201.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_202.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_200_vis_mass.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_200_projectionX.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_200_projectionY.eps}} \\
+\caption{\small Fractions of  $\tau^+$ and $\tau^-$ energies carried by their visible  decay products:
+two dimensional lego plots and one dimensional spectra$^{18}$.
+\textcolor{red}{Red line} is  for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified} with whenever available superimposed result for the
+fitted functions.
+}
+\end{figure}
+
+\newpage
+\subsubsection{The energy spectrum: $\tau^- \to \pi^-$ {\tt vs } $\tau^+ \to \pi^+$}
+\vspace{3\baselineskip}
+
+\begin{figure}[h!]
+\centering
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_300.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_301.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_302.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_300_vis_mass.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_300_projectionX.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_300_projectionY.eps}} \\
+\caption{\small Fractions of  $\tau^+$ and $\tau^-$ energies carried by their visible  decay products:
+two dimensional lego plots and one dimensional spectra$^{18}$.
+\textcolor{red}{Red line} is  for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified} with whenever available superimposed result for the
+fitted functions.
+}\label{Fig:spectra2}%\label{Fig:scattergrams1}
+\end{figure}
+
+\newpage
+\subsubsection{The energy spectrum: $\tau^- \to \mu^-, e^-$ {\tt vs } $\tau^+ \to \rho^+$}
+\vspace{3\baselineskip}
+
+\begin{figure}[h!]
+\centering
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_400.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_401.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_402.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_400_vis_mass.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_400_projectionX.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_400_projectionY.eps}} \\
+\caption{\small Fractions of  $\tau^+$ and $\tau^-$ energies carried by their visible  decay products:
+two dimensional lego plots and one dimensional spectra$^{18}$.
+\textcolor{red}{Red line} is  for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified} with whenever available superimposed result for the
+fitted functions.
+}
+\end{figure}
+
+\newpage
+\subsubsection{The energy spectrum: $\tau^- \to \rho^-$ {\tt vs } $\tau^+ \to \mu^+, e^+$}
+\vspace{3\baselineskip}
+
+\begin{figure}[h!]
+\centering
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_500.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_501.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_502.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_500_vis_mass.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_500_projectionX.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_500_projectionY.eps}} \\
+\caption{\small Fractions of  $\tau^+$ and $\tau^-$ energies carried by their visible  decay products:
+two dimensional lego plots and one dimensional spectra$^{18}$.
+\textcolor{red}{Red line} is  for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified} with whenever available superimposed result for the
+fitted functions.
+}
+\end{figure}
+
+\newpage
+\subsubsection{The energy spectrum: $\tau^- \to \pi^-$ {\tt vs } $\tau^+ \to \rho^+$}
+\vspace{3\baselineskip}
+
+\begin{figure}[h!]
+\centering
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_600.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_601.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_602.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_600_vis_mass.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_600_projectionX.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_600_projectionY.eps}} \\
+\caption{\small Fractions of  $\tau^+$ and $\tau^-$ energies carried by their visible  decay products:
+two dimensional lego plots and one dimensional spectra$^{18}$.
+\textcolor{red}{Red line} is  for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified} with whenever available superimposed result for the
+fitted functions.
+}
+\end{figure}
+
+\newpage
+\subsubsection{The energy spectrum: $\tau^- \to \rho^-$ {\tt vs } $\tau^+ \to \pi^+$}
+\vspace{3\baselineskip}
+
+\begin{figure}[h!]
+\centering
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_700.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_701.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_702.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_700_vis_mass.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_700_projectionX.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_700_projectionY.eps}} \\
+\caption{\small Fractions of  $\tau^+$ and $\tau^-$ energies carried by their visible  decay products:
+two dimensional lego plots and one dimensional spectra$^{18}$.
+\textcolor{red}{Red line} is  for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified} with whenever available superimposed result for the
+fitted functions.
+}
+\end{figure}
+
+\newpage
+\subsubsection{The energy spectrum: $\tau^- \to \rho^-$ {\tt vs } $\tau^+ \to \rho^+$}
+\vspace{3\baselineskip}
+
+\begin{figure}[h!]
+\centering
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_800.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_801.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_802.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_800_vis_mass.eps}} \\
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_800_projectionX.eps}}
+\resizebox*{0.49\textwidth}{!}{\includegraphics{\przedro h2_800_projectionY.eps}} \\
+\caption{\small Fractions of  $\tau^+$ and $\tau^-$ energies carried by their visible  decay products:
+two dimensional lego plots and one dimensional spectra.
+\textcolor{red}{Red line} is  for original sample,
+\textcolor{green}{green line} \greenlineis
+black line is ratio \textcolor{red}{original}/\textcolor{green}{modified}.
+}\label{Fig:spectra3}
+\end{figure}

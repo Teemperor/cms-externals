@@ -1,0 +1,191 @@
+#include <cassert>
+#include <cmath>
+#include <cfloat>
+
+namespace fftjet {
+    template<class Cluster, typename LevelInfo>
+    ClusteringTreeSparsifier<Cluster,LevelInfo>::ClusteringTreeSparsifier(
+        const int maxLevelNumber, const unsigned filterMask,
+        const double* userScales, const unsigned nUserScales)
+        : maxLevelNumber_(maxLevelNumber),
+          filterMask_(filterMask)
+    {
+        if (nUserScales)
+        {
+            assert(userScales);
+            userScales_.reserve(nUserScales);
+            for (unsigned i=0; i<nUserScales; ++i)
+                userScales_.push_back(userScales[i]);
+            userLevels_.resize(nUserScales);
+        }
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ClusteringTreeSparsifier<Cluster,LevelInfo>::transferScaleInfo(
+        const AbsClusteringTree<Cluster,LevelInfo>& in,
+        SparseClusteringTree<Cluster,LevelInfo>* output) const
+    {
+        const unsigned nLevels = in.nLevels();
+        output->reserveScales(nLevels);
+        for (unsigned i=0; i<nLevels; ++i)
+            output->addScale(in.getScale(i));
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ClusteringTreeSparsifier<Cluster,LevelInfo>::sparsify(
+        const AbsClusteringTree<Cluster,LevelInfo>& in,
+        SparseClusteringTree<Cluster,LevelInfo>* out) const
+    {
+        assert(out);
+        out->clear();
+
+        transferScaleInfo(in, out);
+
+        const unsigned nLevels = in.nLevels();
+        if (nLevels <= 1U)
+            // Nothing else to do, the input tree is empty
+            return;
+
+        // Make sure that a negative maximum level specification makes sense
+        if (maxLevelNumber_ <= 0)
+        {
+            const int nlev = static_cast<int>(nLevels);
+            const int maxlev = nlev - 1 + maxLevelNumber_;
+            assert(maxlev > 0);
+            assert(maxlev < nlev);
+        }
+
+        // Calculate the maximum level number
+        const unsigned maxLevel = maxLevelNumber_ <= 0 ?
+            nLevels - 1U - static_cast<unsigned>(std::abs(maxLevelNumber_)) :
+            static_cast<unsigned>(maxLevelNumber_);
+        assert(maxLevel < nLevels);
+
+        // Fill out the level numbers for the user-defined scales
+        const unsigned nUserScales = userScales_.size();
+        for (unsigned i=0; i<nUserScales; ++i)
+            userLevels_[i] = in.getLevel(userScales_[i]);
+
+        // Iterate over all clusters using parent/daughter relationships
+        const TreeNodeId rootId(0, 0);
+        const unsigned ndaus = in.nDaughters(rootId);
+        for (unsigned i=0; i<ndaus; ++i)
+            descendTreeBranch(in, maxLevel, in.daughterId(rootId, i), 0, out);
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ClusteringTreeSparsifier<Cluster,LevelInfo>::descendTreeBranch(
+        const AbsClusteringTree<Cluster,LevelInfo>& in,
+        const unsigned maxLevel, const TreeNodeId& topId,
+        unsigned parentIndex,
+        SparseClusteringTree<Cluster,LevelInfo>* out) const
+    {
+        typedef SparseClusteringTree<Cluster,LevelInfo> SparseTree;
+
+        if (topId.first > maxLevel)
+            // The top node level is too large
+            return;
+
+        // For each branch, we typically need to write at least two
+        // nodes: the one with the slowest drift speed and the one
+        // which splits into more branches.
+        //
+        // First, find the node with the slowest speed and the last node
+        //
+        double minSpeed = DBL_MAX;
+        unsigned branchLength = 0;
+        TreeNodeId lastId = in.badId, slowestId = in.badId;
+
+        for (TreeNodeId id = topId; id.first <= maxLevel && id != in.badId;
+             id = in.daughterId(id, 0))
+        {
+            const double speed = in.uncheckedCluster(id).driftSpeed();
+            if (speed >= 0.0 && speed < minSpeed)
+            {
+                minSpeed = speed;
+                slowestId = id;
+            }
+
+            ++branchLength;
+            if (in.nDaughters(id) != 1U)
+            {
+                lastId = id;
+                break;
+            }
+        }
+
+        // Should not have branches with 0 length (otherwise it is a bug)
+        assert(branchLength);
+
+        // Figure out the median cluster number (if needed)
+        const unsigned midClusterNumber = slowestId == in.badId ?
+            branchLength + 1 : branchLength / 2;
+
+        // User scales (will be needed below)
+        const unsigned nUserScales = userLevels_.size();
+        const unsigned* userLevels = nUserScales ? &userLevels_[0] : 0;
+
+        // Now, write out the "interesting" clusters on the branch
+        unsigned clusNum = 0;
+        for (TreeNodeId id = topId; id.first <= maxLevel && id != in.badId;
+             id = in.daughterId(id, 0))
+        {
+            unsigned mask = 0;
+
+            // Check if this is the level with the highest scale
+            if (id.first == 1U)
+                mask |= SparseTree::MIN_LEVEL;
+
+            // Check if this is the level with the lowest scale
+            if (id.first == maxLevel)
+                mask |= SparseTree::MAX_LEVEL;
+
+            // Check if this is the level with one
+            // of the user-specified scales
+            for (unsigned i=0; i<nUserScales; ++i)
+                if (id.first == userLevels[i])
+                {
+                    mask |= SparseTree::USER_LEVEL;
+                    break;
+                }
+
+            // Check if this is the last node on the branch
+            if (id == lastId)
+            {
+                if (in.nDaughters(id))
+                    mask |= SparseTree::SPLIT_NODE;
+                else
+                    mask |= SparseTree::TERMINAL_NODE;
+            }
+
+            // Check if this is a middle node on the branch
+            if (clusNum == midClusterNumber)
+                mask |= SparseTree::MIDRANGE_NODE;
+
+            // Check if this is the node with the slowest speed
+            if (id == slowestId)
+                mask |= SparseTree::SLOWEST_DRIFT;
+
+            // Should we write out this node?
+            if (mask & filterMask_)
+            {
+                typename SparseTree::Node node(
+                    in.uncheckedCluster(id), id.first, mask);
+                parentIndex = out->addNode(node, parentIndex);
+            }
+
+            ++clusNum;
+            if (in.nDaughters(id) != 1U)
+                break;
+        }
+
+        // Branch out from the last node
+        if (lastId != in.badId)
+        {
+            const unsigned nlast = in.nDaughters(lastId);
+            for (unsigned i=0; i<nlast; ++i)
+                descendTreeBranch(in, maxLevel, in.daughterId(lastId, i),
+                                  parentIndex, out);
+        }
+    }
+}

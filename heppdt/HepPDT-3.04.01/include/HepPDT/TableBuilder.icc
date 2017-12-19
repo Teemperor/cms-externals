@@ -1,0 +1,109 @@
+// ----------------------------------------------------------------------
+//
+// TableBuilder.icc
+// Author: Lynn Garren
+//
+// ----------------------------------------------------------------------
+
+#include <sstream>
+
+namespace HepPDT {
+
+/// not implemented
+void TableBuilder::fillPDT()
+{ ; }
+
+/// unpack existing PDT so its contents can be modified and added to a new PDT
+/// not implemented
+void  TableBuilder::reverseEngineer()
+{ ; }
+
+TempParticleData &   TableBuilder::getParticleData( ParticleID pid )  
+{
+  TempMap::iterator it = tempPDT.find( pid );
+  // for some reason, Solaris CC can't cope with the more compact code
+  if ( it == tempPDT.end() ) {
+     return tempPDT[pid] = TempParticleData(pid);
+  } else {
+     return it->second;   
+  }
+  //return ( it == tempPDT.end() )
+  //     ?  tempPDT[pid] = TempParticleData(pid)  // new one
+  //     :  it->second;                           // old one
+}
+
+TempParticleData &  TableBuilder::getParticleData( std::string const & name )  
+{
+    TempIDMap::iterator it = tempIDT.find( name );
+    if( it == tempIDT.end() ) {
+        // can neither build nor return a proper TempParticleData
+	os << "HepPDT::TableBuilder.getParticleData: There is no entry for " << name << std::endl;
+        exit(-3);
+    }
+    ParticleID pid = it->second;
+    return getParticleData( pid );
+}
+
+TempParticleData &  TableBuilder::getAntiParticle( ParticleID pid, 
+                                                    const std::string & aname )
+{
+    // is it already here?
+    ParticleID apid = ParticleID( -pid.pid() );
+    TempMap::iterator it = tempPDT.find( apid );
+    if( it != tempPDT.end() ) {
+        return it->second;
+    }
+    // check for original particle to copy
+    it = tempPDT.find( pid );
+    if( it == tempPDT.end() ) {
+        // no particle to copy
+	TempParticleData atpd = getParticleData( apid );
+	atpd.tempParticleName = aname;
+	return tempPDT[apid] = atpd;	// getParticleData already added it to the map
+    } else {
+        // copy original
+	TempParticleData tpd = it->second;
+	TempParticleData atpd = tpd.antiparticle( aname );
+        return tempPDT[apid] = atpd;	// add to map and return
+    }
+}
+
+bool TableBuilder::hasParticleData( std::string const & name )
+{
+    TempIDMap::iterator it = tempIDT.find( name );
+    return ( it == tempIDT.end() ) ?  false  : true;
+}
+
+bool TableBuilder::hasAlias( std::string const & alias )
+{
+    TempAliasMap::iterator it = tempAliases.find( alias );
+    return ( it == tempAliases.end() ) ?  false  : true;
+}
+
+void  TableBuilder::addParticle( TempParticleData const & pd )  {
+  getParticleData( pd.tempID ) = pd;
+  if( !hasParticleData( pd.tempParticleName ) ) {
+      tempIDT[pd.tempParticleName] = pd.tempID;
+  }
+}
+
+
+void TableBuilder::addAlias( TempAliasData const & ad )
+{
+    std::string alias = ad.tempAlias;
+    tempAliases[alias] = ad;
+}
+
+TempAliasData& TableBuilder::aliasData( std::string const & alias )
+{
+    TempAliasMap::iterator it = tempAliases.find( alias );
+    if( it == tempAliases.end() ) {
+        // can neither build nor return a proper TempParticleData
+	os << "HepPDT::TableBuilder.aliasData: There is no entry for " 
+                       << alias << std::endl;
+        exit(-4);
+    }
+    return it->second;
+}
+
+}  // namespace HepPDT

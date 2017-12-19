@@ -1,0 +1,4 @@
+# pack-refs with: peeled fully-peeled 
+11f9d1f8a9e7f9bef73bfc06b9857fca8c592cf5 refs/heads/CMake-Integration
+65d3a37ff5aa6b96407336b5049c8b8e175ef2e9 refs/heads/android
+333f3f0b0fdf1d62e9f156011d600182ff395546 refs/heads/master

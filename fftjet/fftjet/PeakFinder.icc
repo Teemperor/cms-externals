@@ -1,0 +1,295 @@
+#include <iostream>
+
+namespace fftjet {
+    inline void PeakFinder::setPeakHeightCutoff(const double cutoff)
+    {
+        peakHeightCutoff_ = cutoff;
+    }
+
+    // The function below works by expanding the grid
+    // values into truncated orthogonal polynomial series
+    template <typename Real>
+    bool PeakFinder::find3by3(const Real g[3][3], Real* x, Real* y,
+                              double hessian[3])
+    {
+        const Real xm1(g[0][0] + g[0][1] + g[0][2]);
+        const Real x0(g[1][0] + g[1][1] + g[1][2]);
+        const Real xp1(g[2][0] + g[2][1] + g[2][2]);
+        const Real ym1(g[0][0] + g[1][0] + g[2][0]);
+        const Real y0(g[0][1] + g[1][1] + g[2][1]);
+        const Real yp1(g[0][2] + g[1][2] + g[2][2]);
+
+        const Real cx((xp1 - xm1)/6);
+        const Real cy((yp1 - ym1)/6);
+        const Real cxy((g[0][0] - g[0][2] - g[2][0] + g[2][2])/4);
+        const Real cxsq((xm1 + xp1 - 2*x0)/3);
+        const Real cysq((ym1 + yp1 - 2*y0)/3);
+        const Real det(cxsq*cysq - cxy*cxy);
+
+        if (det)
+        {
+            *x = (cxy*cy - cx*cysq)/det;
+            *y = (cx*cxy - cxsq*cy)/det;
+        }
+        else
+        {
+            *x = 0;
+            *y = 0;
+        }
+
+        hessian[0] = cxsq;
+        hessian[1] = cxy;
+        hessian[2] = cysq;
+
+        return cxsq <= 0 && cysq <= 0 && det >= 0;
+    }
+
+    // The meaning of filled mask values is as follows:
+    //   0 -- Definitely not a peak (there is a higher value
+    //          neighbor or the value is not above the cutoff).
+    //   1 -- Plateau: all neighbors have the same values.
+    //   2 -- Peak seed: there are no higher neighbors and
+    //          there is at least one lower neighbor
+    //   3 -- Definite peak: all neighbors are lower.
+    //   4 -- This value can be set only by the mask
+    //          processing function. It means that the
+    //          peak position is exactly at that point,
+    //          and that subcell resolution should not
+    //          be applied. This happens, for example,
+    //          in the rare case of a 3x3 plateau. An attempt
+    //          to determine the resolution with subcell
+    //          precision would in this case result in
+    //          a near-zero determinant and a very unstable
+    //          solution.
+    template <typename Real>
+    void PeakFinder::fillMask(const Real* data,
+                              const unsigned nEta,
+                              const unsigned nPhi,
+                              const unsigned minEtaBin,
+                              const unsigned maxEtaBin,
+                              unsigned *nseeds, unsigned *npeaks)
+    {
+        clearMaskBuffer(nEta, nPhi);
+        *nseeds = 0;
+        *npeaks = 0;
+
+        for (unsigned ieta = minEtaBin; ieta < maxEtaBin; ++ieta)
+        {
+            const Real* etam1 = data + (ieta - 1)*nPhi;
+            const Real* etadata = data + ieta*nPhi;
+            const Real* etap1 = data + (ieta + 1)*nPhi;
+            int* m = mask + ieta*nPhi;
+            for (unsigned iphi = 0; iphi < nPhi; ++iphi)
+            {
+                const Real value(etadata[iphi]);
+                if (value <= peakHeightCutoff_)
+                    continue;
+
+                const unsigned iphim1 = iphi ? iphi - 1 : nPhi - 1;
+                const unsigned iphip1 = (iphi + 1) % nPhi;
+
+                if (value >= etadata[iphim1] &&
+                    value >= etadata[iphip1] &&
+                    value >= etam1[iphim1] &&
+                    value >= etam1[iphi] &&
+                    value >= etam1[iphip1] &&
+                    value >= etap1[iphim1] &&
+                    value >= etap1[iphi] &&
+                    value >= etap1[iphip1])
+                {
+                    m[iphi] = 1;
+                    if (value > etadata[iphim1] ||
+                        value > etadata[iphip1] ||
+                        value > etam1[iphim1] ||
+                        value > etam1[iphi] ||
+                        value > etam1[iphip1] ||
+                        value > etap1[iphim1] ||
+                        value > etap1[iphi] ||
+                        value > etap1[iphip1])
+                    {
+                        m[iphi] = 2;
+                        ++*nseeds;
+                        if (value > etadata[iphim1] &&
+                            value > etadata[iphip1] &&
+                            value > etam1[iphim1] &&
+                            value > etam1[iphi] &&
+                            value > etam1[iphip1] &&
+                            value > etap1[iphim1] &&
+                            value > etap1[iphi] &&
+                            value > etap1[iphip1])
+                        {
+                            m[iphi] = 3;
+                            ++*npeaks;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    template <typename Real>
+    void PeakFinder::print3by3(const Real g[3][3]) const
+    {
+        std::cout << '{';
+        for (unsigned i=0; i<3; ++i)
+        {
+            if (i) std::cout << ' ';
+            std::cout << '{';
+            for (unsigned j=0; j<3; ++j)
+            {
+                if (j) std::cout << ' ';
+                std::cout << g[i][j];
+            }
+            std::cout << '}';
+        }
+        std::cout << '}' << std::endl;
+    }
+
+    template <typename Real>
+    int PeakFinder::find(const Real* data,
+                         const unsigned nEta, const unsigned nPhi,
+                         std::vector<Peak >* result)
+    {
+        assert(data);
+        assert(nEta);
+        assert(nPhi);
+        assert(result);
+
+        int status = 0;
+        result->clear();
+
+        const unsigned minEtaBin = minEtaBin_ ? minEtaBin_ : 1;
+        const unsigned maxEtaBin = maxEtaBin_ > nEta-1 ? nEta-1 : maxEtaBin_;
+
+        // Take care of the mask memory
+        allocateMaskBuffer(nEta, nPhi);
+
+        // Mask potential peak positions
+        unsigned nMaskSeeds, nMaskPeaks;
+        fillMask(data, nEta, nPhi, minEtaBin, maxEtaBin,
+                 &nMaskSeeds, &nMaskPeaks);
+        if (nMaskSeeds == 0)
+            return status;
+
+        if (nMaskSeeds != nMaskPeaks)
+            // Perform some pattern recognition on the mask
+            processMask(nEta, nPhi, minEtaBin, maxEtaBin);
+
+        // Fill out the vector of results
+        double hessian[3] = {0.0, 0.0, 0.0};
+        if (subCellResolution_)
+        {
+            Real peakEta, peakPhi, g[3][3];
+            for (unsigned ieta = minEtaBin; ieta < maxEtaBin; ++ieta)
+            {
+                const int* m = mask + ieta*nPhi;
+                for (unsigned iphi = 0; iphi < nPhi; ++iphi)
+                {
+                    if (m[iphi] == 4)
+                    {
+                        hessian[0] = 0.0;
+                        hessian[1] = 0.0;
+                        hessian[2] = 0.0;
+                        result->push_back(
+                            Peak(ieta, iphi, data[ieta*nPhi + iphi], hessian));
+                    }
+                    else if (m[iphi] == 3)
+                    {
+                        const Real* etam1 = data + (ieta - 1)*nPhi;
+                        const Real* etadata = data + ieta*nPhi;
+                        const Real* etap1 = data + (ieta + 1)*nPhi;
+                        const unsigned iphim1 = iphi ? iphi - 1 : nPhi - 1;
+                        const unsigned iphip1 = (iphi + 1) % nPhi;
+                        g[0][0] = etam1[iphim1];
+                        g[0][1] = etam1[iphi];
+                        g[0][2] = etam1[iphip1];
+                        g[1][0] = etadata[iphim1];
+                        g[1][1] = etadata[iphi];
+                        g[1][2] = etadata[iphip1];
+                        g[2][0] = etap1[iphim1];
+                        g[2][1] = etap1[iphi];
+                        g[2][2] = etap1[iphip1];
+
+                        if (find3by3(g, &peakEta, &peakPhi, hessian))
+                        {
+                            // We should keep it between -1 and 1.
+                            // Otherwise we get into various troubles,
+                            // incuding the problem that we could
+                            // obtain a negative bin number for
+                            // the peak position in eta.
+                            if (peakEta >= -1.0 && peakEta <= 1.0 &&
+                                peakPhi >= -1.0 && peakPhi <= 1.0)
+                            {
+                                result->push_back(Peak(
+                                    static_cast<double>(ieta) + peakEta,
+                                    static_cast<double>(iphi) + peakPhi,
+                                    etadata[iphi], hessian));
+                            }
+                            else
+                            {
+                                ++status;
+
+                                // The fit result is not likely
+                                // to be reliable for extrapolation.
+                                // Append the coordinates of the
+                                // center cell instead.
+                                result->push_back(
+                                    Peak(ieta, iphi, etadata[iphi], hessian));
+
+                                if (printFitWarnings_)
+                                {
+                                    // Print out a message about the problem
+                                    std::cout << "WARNING! In fftjet::PeakFinder : "
+                                              << "fitted peak position is out of "
+                                              << "reticle." << std::endl;
+                                    std::cout << "ieta = " << ieta 
+                                              << ", iphi = " << iphi
+                                              << ", peak is at {"
+                                              << peakEta << ' ' << peakPhi << '}'
+                                              << " from this data:"
+                                              << std::endl;
+                                    print3by3(g);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            ++status;
+
+                            // The fit tells us that this is not
+                            // a real peak. We will follow this
+                            // suggestion and ignore the candidate.
+                            if (printFitWarnings_)
+                            {
+                                // Print out a message about the problem
+                                std::cout << "WARNING! In fftjet::PeakFinder : "
+                                          << "peak candidate rejected."
+                                          << std::endl;
+                                std::cout << "ieta = " << ieta 
+                                          << ", iphi = " << iphi
+                                          << ", candidate is at {"
+                                          << peakEta << ' ' << peakPhi << '}'
+                                          << " from this data:"
+                                          << std::endl;
+                                print3by3(g);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            for (unsigned ieta = minEtaBin; ieta < maxEtaBin; ++ieta)
+            {
+                const int* m = mask + ieta*nPhi;
+                for (unsigned iphi = 0; iphi < nPhi; ++iphi)
+                    if (m[iphi] >= 3)
+                        result->push_back(
+                            Peak(ieta, iphi, data[ieta*nPhi + iphi], hessian));
+            }
+        }
+
+        return status;
+    }
+}

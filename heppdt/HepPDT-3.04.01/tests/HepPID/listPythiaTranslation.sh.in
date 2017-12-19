@@ -1,0 +1,13 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f listPythiaTranslation.out
+
+./listPythiaTranslation@EXEEXT@ 
+
+cmd=`@DIFF_Q@ listPythiaTranslation.out @srcdir@/listPythiaTranslation.output`
+
+if [ -n "$cmd" ]; then
+  echo "listPythiaTranslation.out and @srcdir@/listPythiaTranslation.output differ"
+  exit 1;
+fi

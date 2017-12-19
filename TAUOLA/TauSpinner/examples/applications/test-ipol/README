@@ -1,0 +1,77 @@
+Test for Ipol options of TauSpinner
+-----------------------------------
+
+To redo the test:
+
+## 1 ##
+
+Generate HepMC data samples using Tauola++ with the following settings:
+(if different filenames are used, next steps may require modifications)
+
+  1) /tmp/ipol.polarized.hepmc
+
+     Default Tauola++ settings
+     
+     Sample will be analyzed with Ipol = 0
+
+  2) /tmp/ipol.unpolarized.hepmc
+
+     Set Tauola::spin_correlation.setAll(false)
+     
+     Sample will be analyzed with Ipol = 1
+
+  3) /tmp/ipol.modified.plzap0.hepmc
+
+     Modify src/tauolaFortranInterfaces/tauola_extras.f
+     so that PLZAP0 always returns 0.5
+     
+     Sample will be analyzed with Ipol = 2
+
+  4) /tmp/ipol.modified.costhe0.hepmc
+
+     Modify src/tauolaFortranInterfaces/tauola_extras.f
+     so that in PLZAP0 COSTHE = 0.0 and IDE = 11
+     
+     Sample will be analyzed with Ipol = 3
+
+## 2 ##
+
+Compile test-ipol.exe (executing 'make' in this directory should be enough)
+
+Check if the filenames of the datafiles are correct and execute 'test-ipol-runall.sh'
+This will create 4 rootfiles with results of the analysis of the above samples
+Each sample will be analyzed with proper Ipol setting
+The polarized sample (sample 1) will be used as benchmark only
+
+test-ipol-runall.sh is set up to analyze 1M events.
+Change if necessary (even 100k is enough)
+
+## 3 ##
+
+When the analysis is complete run:
+
+root -b -q test-ipol.C
+
+This will reproduce all .eps files from 'test-ipol-plots' directory
+
+## 4 ##
+
+make in test-ipol-plots
+
+The results show spectrum of pi- energy / tau- energy
+
+Red line is always the benchmark (polarized) sample.
+Green line comes from the 2nd sample generated to test appropriate ipol value (see point 1)
+
+- left-hand plots have green line without any weights
+- right-hand plots have green line with weight calculated with appropriate ipol applied
+
+- Page 1 contains results from all events, without any cuts
+- Page 2 contains results for events where costheta' < 0.0
+- Page 3 contains results for events where costheta' > 0.0
+
+All right-hand plot should show green line matching red line
+See 'test-ipol.BENCHMARK.pdf' to see an example result for 1Mevents
+
+--
+Last modified: T. Przedzinski 9.I.2014

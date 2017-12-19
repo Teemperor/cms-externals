@@ -1,0 +1,40 @@
+namespace fftjet {
+    inline FFTWFloatEngine::FFTWFloatEngine(
+               const unsigned nEta, const unsigned nPhi,
+               const unsigned optimization)
+        : FFTWEngine<float, fftwf_complex, fftwf_plan>(nEta, nPhi)
+    {
+        in = static_cast<float *>(fftwf_malloc(
+              nEta_ * nPhi_ * sizeof(float)));
+        assert(in);
+        out = static_cast<fftwf_complex *>(fftwf_malloc(
+              nEta_ * (nPhi_/2 + 1) * sizeof(fftwf_complex)));
+        assert(out);
+
+        const unsigned plannerFlags = optimization | FFTW_DESTROY_INPUT;
+        if (nEta == 1)
+        {
+            pf = fftwf_plan_dft_r2c_1d(nPhi_, in, out, plannerFlags);
+            pb = fftwf_plan_dft_c2r_1d(nPhi_, out, in, plannerFlags);
+        }
+        else
+        {
+            pf = fftwf_plan_dft_r2c_2d(nEta_, nPhi_, in, out, plannerFlags);
+            pb = fftwf_plan_dft_c2r_2d(nEta_, nPhi_, out, in, plannerFlags);
+        }
+        assert(pf);
+        assert(pb);
+
+        engineExecute = fftwf_execute;
+        engineMalloc = fftwf_malloc;
+        engineFree = fftwf_free;
+    }
+
+    inline FFTWFloatEngine::~FFTWFloatEngine()
+    {
+        fftwf_destroy_plan(pb);
+        fftwf_destroy_plan(pf);
+        fftwf_free(out);
+        fftwf_free(in);
+    }
+}

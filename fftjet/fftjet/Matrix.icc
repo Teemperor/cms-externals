@@ -1,0 +1,365 @@
+#include <cassert>
+#include <string>
+#include <sstream>
+
+namespace fftjet {
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>::Matrix()
+        : data_(0), nrows_(0), ncols_(0), len_(0)
+    {
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>::Matrix(const Matrix& r)
+        : data_(0), nrows_(r.nrows_), ncols_(r.ncols_), len_(r.len_)
+    {
+        assert(len_);
+        if (len_ <= Len)
+            data_ = local_;
+        else
+            data_ = new Numeric[len_];
+        for (unsigned i=0; i<len_; ++i)
+            data_[i] = r.data_[i];
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>::Matrix(const unsigned nrows,
+                                       const unsigned ncols)
+        : data_(0), nrows_(nrows), ncols_(ncols), len_(nrows*ncols)
+    {
+        assert(len_);
+        if (len_ <= Len)
+            data_ = local_;
+        else
+            data_ = new Numeric[len_];
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>::Matrix(const unsigned nrows,
+                                       const unsigned ncols,
+                                       const Numeric* data)
+        : data_(0), nrows_(nrows), ncols_(ncols), len_(nrows*ncols)
+    {
+        assert(data);
+        assert(len_);
+        if (len_ <= Len)
+            data_ = local_;
+        else
+            data_ = new Numeric[len_];
+        for (unsigned i=0; i<len_; ++i)
+            data_[i] = data[i];
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline void Matrix<Numeric,Len>::zeroOut()
+    {
+        const Numeric null(static_cast<Numeric>(0));
+        for (unsigned i=0; i<len_; ++i)
+            data_[i] = null;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>::Matrix(const unsigned nrows,
+                                       const unsigned ncols,
+                                       const int initCode)
+        : data_(0), nrows_(nrows), ncols_(ncols), len_(nrows*ncols)
+    {
+        assert(len_);
+        if (len_ <= Len)
+            data_ = local_;
+        else
+            data_ = new Numeric[len_];
+        zeroOut();
+
+        switch (initCode)
+        {
+        case 0:
+            break;
+        case 1:
+            {
+                assert(nrows_ == ncols_);
+                const Numeric one(static_cast<Numeric>(1));
+                for (unsigned i=0; i<nrows_; ++i)
+                    data_[i*ncols_ + i] = one;
+            }
+            break;
+        default:
+            assert(0);
+        }
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>::~Matrix()
+    {
+        if (data_ != local_)
+            delete [] data_;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline void Matrix<Numeric,Len>::reset()
+    {
+        if (data_ != local_)
+            delete [] data_;
+        data_ = 0;
+        nrows_ = 0;
+        ncols_ = 0;
+        len_ = 0;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len> Matrix<Numeric,Len>::symmetrize() const
+    {
+        assert(nrows_ == ncols_);
+        Matrix<Numeric,Len> result(ncols_, nrows_);
+        const Numeric two(static_cast<Numeric>(2));
+        for (unsigned i=0; i<nrows_; ++i)
+        {
+            result.data_[i*ncols_+i] = data_[i*ncols_+i];
+            for (unsigned j=0; j<i; ++j)
+            {
+                const Numeric s((data_[i*ncols_+j]+data_[j*ncols_+i])/two);
+                result.data_[i*ncols_+j] = s;
+                result.data_[j*ncols_+i] = s;
+            }
+        }
+        return result;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline void Matrix<Numeric,Len>::resize(const unsigned nrows,
+                                            const unsigned ncols)
+    {
+        if (nrows != nrows_ || ncols != ncols_)
+        {
+            reset();
+            nrows_ = nrows;
+            ncols_ = ncols;
+            len_ = nrows*ncols;
+            assert(len_);
+            if (len_ <= Len)
+                data_ = local_;
+            else
+                data_ = new Numeric[len_];
+        }
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>&
+    Matrix<Numeric,Len>::operator=(const Matrix& r)
+    {
+        if (this == &r)
+            return *this;
+        if (data_)
+        {
+            assert(nrows_ == r.nrows_);
+            assert(ncols_ == r.ncols_);
+        }
+        else
+        {
+            nrows_ = r.nrows_;
+            ncols_ = r.ncols_;
+            len_ = r.len_;
+            if (len_ <= Len)
+                data_ = local_;
+            else
+                data_ = new Numeric[len_];
+        }
+        for (unsigned i=0; i<len_; ++i)
+            data_[i] = r.data_[i];
+        return *this;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline bool Matrix<Numeric,Len>::operator==(const Matrix& r) const
+    {
+        assert(nrows_ == r.nrows_);
+        assert(ncols_ == r.ncols_);
+        for (unsigned i=0; i<len_; ++i)
+            if (data_[i] != r.data_[i])
+                return false;
+        return true;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline bool Matrix<Numeric,Len>::operator!=(const Matrix& r) const
+    {
+        return !(*this == r);
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Numeric* Matrix<Numeric,Len>::operator[](const unsigned i) const
+    {
+        return data_ + i*ncols_;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>
+    Matrix<Numeric,Len>::operator+(const Matrix& r) const
+    {
+        assert(nrows_ == r.nrows_);
+        assert(ncols_ == r.ncols_);
+        Matrix<Numeric,Len> result(nrows_, ncols_);
+        for (unsigned i=0; i<len_; ++i)
+            result.data_[i] = data_[i] + r.data_[i];
+        return result;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>
+    Matrix<Numeric,Len>::operator-(const Matrix& r) const
+    {
+        assert(nrows_ == r.nrows_);
+        assert(ncols_ == r.ncols_);
+        Matrix<Numeric,Len> result(nrows_, ncols_);
+        for (unsigned i=0; i<len_; ++i)
+            result.data_[i] = data_[i] - r.data_[i];
+        return result;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len> Matrix<Numeric,Len>::T() const
+    {
+        Matrix<Numeric,Len> result(ncols_, nrows_);
+        for (unsigned row=0; row<nrows_; ++row)
+        {
+            const Numeric* prow = data_ + row*ncols_;
+            Numeric* slice = result.data_ + row;
+            for (unsigned col=0; col<ncols_; ++col)
+                slice[col*nrows_] = prow[col];
+        }
+        return result;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>
+    Matrix<Numeric,Len>::operator*(const Matrix& r) const
+    {
+        assert(ncols_ == r.nrows_);
+        Matrix<Numeric,Len> result(nrows_, r.ncols_);
+        for (unsigned row=0; row<nrows_; ++row)
+        {
+            const Numeric* prow = data_ + row*ncols_;
+            Numeric* pres = result.data_ + row*r.ncols_;
+            for (unsigned col=0; col<r.ncols_; ++col)
+            {
+                Numeric sum(0);
+                const Numeric* slice = r.data_ + col;
+                for (unsigned k=0; k<ncols_; ++k)
+                    sum += prow[k]*slice[k*r.ncols_];
+                pres[col] = sum;
+            }
+        }
+        return result;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>
+    Matrix<Numeric,Len>::operator*(const Numeric r) const
+    {
+        Matrix<Numeric,Len> result(nrows_, ncols_);
+        for (unsigned i=0; i<len_; ++i)
+            result.data_[i] = data_[i]*r;
+        return result;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>
+    Matrix<Numeric,Len>::operator/(const Numeric r) const
+    {
+        assert(r != static_cast<Numeric>(0));
+        Matrix<Numeric,Len> result(nrows_, ncols_);
+        for (unsigned i=0; i<len_; ++i)
+            result.data_[i] = data_[i]/r;
+        return result;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len> Matrix<Numeric,Len>::operator+() const
+    {
+        return *this;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len> Matrix<Numeric,Len>::operator-() const
+    {
+        Matrix<Numeric,Len> result(nrows_, ncols_);
+        for (unsigned i=0; i<len_; ++i)
+            result.data_[i] = -data_[i];
+        return result;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>&
+    Matrix<Numeric,Len>::operator*=(const Numeric r)
+    {
+        for (unsigned i=0; i<len_; ++i)
+            data_[i] *= r;
+        return *this;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>&
+    Matrix<Numeric,Len>::operator/=(const Numeric r)
+    {
+        assert(r != static_cast<Numeric>(0));
+        for (unsigned i=0; i<len_; ++i)
+            data_[i] /= r;
+        return *this;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>&
+    Matrix<Numeric,Len>::operator+=(const Matrix& r)
+    {
+        assert(nrows_ == r.nrows_);
+        assert(ncols_ == r.ncols_);
+        for (unsigned i=0; i<len_; ++i)
+            data_[i] += r.data_[i];
+        return *this;
+    }
+
+    template<typename Numeric, unsigned Len>
+    inline Matrix<Numeric,Len>&
+    Matrix<Numeric,Len>::operator-=(const Matrix& r)
+    {
+        assert(nrows_ == r.nrows_);
+        assert(ncols_ == r.ncols_);
+        for (unsigned i=0; i<len_; ++i)
+            data_[i] -= r.data_[i];
+        return *this;
+    }
+}
+
+template<typename N, unsigned Len>
+std::ostream& operator<<(std::ostream& os, const fftjet::Matrix<N, Len>& m)
+{
+    // Figure out the largest string length needed to print an element
+    const unsigned nrows = m.nrows();
+    const unsigned ncols = m.ncols();
+    const unsigned len = nrows*ncols;
+    const N* data = m.data();
+    unsigned maxlen = 0;
+    for (unsigned i=0; i<len; ++i)
+    {
+        std::stringstream s;
+        s.setf(os.flags());
+        s << data[i];
+        const unsigned siz = s.str().size();
+        if (siz > maxlen)
+            maxlen = siz;
+    }
+    ++maxlen;
+
+    for (unsigned i=0; i<nrows; ++i)
+    {
+        for (unsigned j=0; j<ncols; ++j)
+        {
+            os.width(maxlen);
+            os << m[i][j];
+        }
+        if (i+1 < nrows)
+            os << std::endl;
+    }
+
+    return os;
+}

@@ -1,0 +1,68 @@
+#include <cmath>
+#include <cassert>
+
+#include "leastSquaresPolyFit.hh"
+
+template<class Cluster, typename LevelInfo, class BooleanPredicate>
+inline ExtrapolatedClusterIntegrator<Cluster,LevelInfo,BooleanPredicate>::
+ExtrapolatedClusterIntegrator(
+    BooleanPredicate* pred, const double maxRadius,
+    const double scaleInversionPower, const unsigned maxDegree)
+    : pred_(pred),
+      maxDistance_(maxRadius),
+      sInv_(scaleInversionPower),
+      maxDeg_(maxDegree)
+{
+    assert(pred_);
+    assert(sInv_ < 0.0);
+    coeffs.resize(maxDeg_ + 1);
+}
+
+template<class Cluster, typename LevelInfo, class BooleanPredicate>
+ClusterIntegral
+ExtrapolatedClusterIntegrator<Cluster,LevelInfo,BooleanPredicate>::
+operator()(
+    const fftjet::AbsClusteringTree<Cluster,LevelInfo>& tree,
+    const fftjet::TreeNodeId& idIn)
+{
+    tree.heritageLine(idIn, *pred_, maxDistance_, &clusters);
+    const unsigned nclus = clusters.size();
+    switch (nclus)
+    {
+        case 0:
+            return ClusterIntegral(0, -1, -1);
+            
+        case 1:
+        {
+            const double s = clusters[0].scale();
+            const double v = s*s*clusters[0].magnitude();
+            return ClusterIntegral(v, -1, 0);
+        }
+            
+        default:
+        {
+            const unsigned deg = nclus - 1 > maxDeg_ ? maxDeg_ : nclus - 1;
+            
+            scales.clear();
+            scales.reserve(nclus);
+            
+            magnitudes.clear();
+            magnitudes.reserve(nclus);
+            
+            for (unsigned iclus=0; iclus<nclus; ++iclus)
+            {
+                const double s = clusters[iclus].scale();
+                scales.push_back(pow(s, sInv_));
+                magnitudes.push_back(s*s*clusters[iclus].magnitude());
+            }
+            
+            double constTermError;
+            const double chisq = leastSquaresPolyFit(
+                deg, &scales[0], &magnitudes[0], nclus,
+                &coeffs[0], &constTermError);
+            
+            return ClusterIntegral(coeffs[deg], constTermError, deg,
+                                   chisq, nclus-(deg+1));
+        }
+    }
+}

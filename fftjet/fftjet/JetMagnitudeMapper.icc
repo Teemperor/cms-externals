@@ -1,0 +1,36 @@
+#include <cassert>
+#include "fftjet/invertJetResponse.hh"
+
+namespace fftjet {
+    template <typename Jet>
+    template <class Functor>
+    JetMagnitudeMapper<Jet>::JetMagnitudeMapper(
+        const Functor& f, const double maxMagnitude, unsigned npoints)
+        : interp(0)
+    {
+        assert(maxMagnitude > 0.0);
+        if (npoints < 1)
+            npoints = 1;
+
+        const double maxRatio = f(maxMagnitude);
+        assert(maxRatio > 0.0);
+        const double zeroRatio = f(0.0);
+        assert(zeroRatio > 0.0);
+
+        const double bigMagnitude = maxMagnitude*maxRatio;
+        const double ystep = bigMagnitude/npoints;
+
+        // Of course, the inverse response curve is just 1/f.
+        // The trick is to tabulate it on a grid which is equidistant in y
+        // rather than in x.
+        double *data = new double[npoints];
+        for (unsigned i=0; i<npoints; ++i)
+        {
+            const double y = ystep*(i + 0.5);
+            data[i] = invertJetResponse(f, y)/y;
+        }
+        interp = new LinearInterpolator1d(data, npoints, 0.0, bigMagnitude,
+                                          1.0/zeroRatio, 1.0/maxRatio);
+        delete [] data;
+    }
+}

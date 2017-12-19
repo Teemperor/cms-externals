@@ -1,0 +1,24 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f testReadParticleTable.out
+
+./testReadParticleTable@EXEEXT@
+
+if ( ! `sed 's/e-0\([0-9][0-9]\)/e-\1/g' testReadParticleTable.out | \
+  sed 's/e+0\([0-9][0-9]\)/e+\1/g'  | \
+  @DIFF_Q@ - @srcdir@/testReadParticleTable.output > /dev/null` )
+then
+  echo "testReadParticleTable.out and @srcdir@/testReadParticleTable.output differ"
+  exit 1;
+fi
+
+if ( ! `sed 's/e-0\([0-9][0-9]\)/e-\1/g' testReadParticleTableStatus.out | \
+  sed 's/e+0\([0-9][0-9]\)/e+\1/g'  | \
+  @DIFF_Q@ - @srcdir@/testReadParticleTableStatus.output > /dev/null` )
+then
+  echo "testReadParticleTableStatus.out and @srcdir@/testReadParticleTableStatus.output differ"
+  exit 1;
+fi
+
+exit 0;

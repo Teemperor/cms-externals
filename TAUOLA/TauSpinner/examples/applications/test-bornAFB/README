@@ -1,0 +1,99 @@
+Compile: make
+Run:     ./bornAFB-test.exe <input_HepMC_file> <output_rootfile> [<events_limit>]
+
+PURPOSE:
+
+This test is designed to study the content of the HepMC format event sample from the 
+perspective of its physics content.
+The principle of test relies on the fact that in the event sample, 4-momenta (and flavours0 of 
+tau-leptons and quark antiquark annihilating into these taus are stored. 
+
+The most important results are printed out at the end of bornAFB-test.exe execution
+(an example of such output is stored in bornAFB-test.OK.out).
+The complementary illustrative results are  encapsulated 
+in rootfile and two eps files with plots.
+
+Three aspects are tested:
+
+1) Electroweak effective born parameters (with the help of AFB)
+2) impact of p_T on TauSpinner algorithm for evaluation of hard scattering cos(theta)
+3) matching of PDFs used by  generator for production of event sample  
+
+TESTS:
+
+Test 1)
+=======
+
+  From the generated sample (or any of its sub-sample selected by cuts on initial hadronic states
+and tau-pair 4-momentum; no individual cuts on tau+ and tau-) one can  construct 
+distribiution in the cosine of angle theta, the scattering angle between direction of quark
+and tau-, defined in the rest-frame of tau+ tau- pair. Because intermediate state
+is assumed to be of the vector the resulting distribution to a good approximation 
+(NNLO of QCD) should be F(cos(theta)=1+cos^2(theta)+ A_bar cos(theta). The parameter A_bar linearly proportional 
+to forward-backward asymmetry can be obtained from the fit to the distribution obtained from the 
+whole sample. Separation into sub-samples for u and d quarks can be easily applied as incoming 
+quark flavours are available in HepMC.
+TauSpinner is calculating parameters of Born for each of the events as well. At the intermediate 
+step the calculation of effective Borns  for each possible configuration of incoming quarks is performed.
+As an easy to obtain by product Corresponding A is calculated. An average of such A can be then performed.
+It can be weighted with PDFs of quark up and down
+The outcome of the test read (bornAFB-test.OK.out):
+
+No of events processed:     1000000
+Down quarks A_bar from fit: 1.6902 +/- 0.0113638
+Down quarks average A:      1.69116
+Up   quarks A_bar from fit: 1.61192 +/- 0.0122675
+Up   quarks average A:      1.61273
+
+The consistency of the electroweak Born parameters used in generation of sample and 
+in TauSpinner is confirmed if   A_bar=A (with reasonable precision) for up and down quarks as well.
+
+The discrepancy may be a consequence of other ambiguities, due to p_T or differences in PDFs, but it is
+expected to be small or even insignificant. That is why we have prepared further tests.
+
+
+Test 2) 
+=======
+
+The hard process encapsulated in event record enables to calculate scattering angle of the hard process.
+TauSpinner uses approximation and the sign of the cos(theta) can not be determined. The choice is made
+on the statistical basis. To monitor effects of possible p_T activities for the events we histogram 
+the difference of modules. The smaller the difference, the smaller possible ambiguity. Results 
+are collected in file:
+bornAFB-test-CosthetaSpread.eps
+
+In file bornAFB-test.eps shapes of the cos(theta)  distributions used to monitor generated sample are given.
+Fitted distribution is superimposed. Discrepancy could indicate kinematical inconsistencies 
+resulting from eg. p_T.
+
+Test 3) 
+=======
+
+For each event, stored in HepMC format,  we can read what was the flavour of the incoming 
+quark  
+
+The outcome of the test read (bornAFB-test.BAD_PDF.out):
+Rate of down quarks: 0.217545 from TauSpinner: 0.177901
+Rate of up quarks:   0.766455 from TauSpinner: 0.797817
+
+We can see that for this case flavours of the incoming quarks were actually 
+in different proportion than estimated by TauSpinner on the basis of weight constructed from PDFs
+and Born level cross sections. If the matching PDFs are used differences for rates  are of course
+much smaller (see: bornAFB-test.OK.out).
+
+PRACTICAL COMMENTS:
+
+We have collected two sets of results, they differ by the choice of PDFs and in name:
+the string OK is interchanged with BAD_PDF.
+
+Make sure that the correct PDF set
+is loaded. The difference between matching  and not matching choice of the PDF sets in geerator used for the 
+preparation of sample and in TauSpinner can be
+observed by looking at the differences between bornAFB-test.OK.* and bornAFB-test.BAD_PDF.*
+files. One can see that most of the results remain exactly the same. Nonetheless the
+difference can be observed by looking, for example, at the rate of up to down quarks.
+In this example, the rates differ significantly between the  values obtained from the sample
+and from TauSpinner.
+
+--
+Last modified: T. Przedzinski 9 Dec. 2013

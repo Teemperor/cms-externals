@@ -1,0 +1,20 @@
+//
+//  This table can be read with the addParticleTable function,
+//  which is defined in TableBuilder.hh:
+//  bool  addParticleTable( std::istream&, TableBuilder&,
+//                          bool validate = false );
+//  where:
+//    validate=true => verify that the ParticleID is valid
+//
+//  The "charge" is defined to be 3 times the actual charge, 
+//  EXCEPT in the case of Q-balls, where the charge is 10 times the actual charge.
+//
+// Comments are identified by either "//" or "#", beginning in the first column.
+// Comments MUST be in the first column.
+//
+//       ID name                  chg       mass    total width   lifetime 
+//
+    4110220 dyon(22)              66      0.00000     0.00000   0.00000E+00
+    4120170 dyon(17)-             51      0.00000     0.00000   0.00000E+00
+   10013740 Q-ball(137.4)        1374     0.00000     0.00000   0.00000E+00
+   21013740 illegal ID             7      0.00000     0.00000   0.00000E+00

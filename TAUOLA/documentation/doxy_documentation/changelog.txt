@@ -1,0 +1,263 @@
+Changelog for changes with respect to version 1.0
+-------------------------------------------------
+
+General note:
+- For use with Athena (compilation on 64bit platform):
+  once ./configure  script is executed add in make.inc "-m32" to CFLAGS.
+  The make.inc is placed in the  main directory.
+2018.VIII.15
+- new version prepared. 
+- For TAUOLA it is fix to prevent unwanted reinitialization
+  and explicit initialization, 0, of iqcd for SANC
+- for TaSpinner it is versionh with work on SPIN2 completed.
+
+2017.VII.11
+- tests for SPIN2 example of TauSpinner converged
+2016.XII.3
+- draft of installation of alternative matrix elements, X2-mediated introduced
+  in a commented out version. Tests and bug-fixing pending.
+2016.XI.10
+- polarization effects for 3-scalars decay channels with K_0's added for 
+  TauSpinner, and tests performed.
+2016.V.19
+- for VBF calculation order of tau+ tau- was not adjusted for ME calc. 
+  It is fixed now.
+2016.V.6
+- Non-author (that is performed by users) tests of basic functionalities passed
+- TauSpinner v2.0.1 introduced.
+2016.IV.27
+- Makefile.am from platform/LCGCONFIG/TauSpinner corrected for the library 
+  to work in case of 2 jets final states in LCG library.
+- Non author tests of 2--> 2 applications reported.
+
+2016.III.30
+- Only the case of EWSH=1 was over optimized, affecting alphas. 
+  Optimization removed, (re-) and inititialization of alphas fixed.
+  Line has to be replaced (in two) places:
+  -      IF(MODE.EQ.0.AND.VARIANT.EQ.0.AND.MODESAVED.NE.1) THEN
+  +      IF(MODE.EQ.0.AND.VARIANT.EQ.0) THEN
+
+2016.III.12
+- examples converted to use pythia8.2XX
+  examples can no longer be compiled with older pythia versions
+
+2016.III.9
+- complete draft  for version Tauola++ v1.1.6, TauSpinner v2.0.0
+- modification of electroweak scheme or running of alpha_s with user
+  functions, prepared.
+
+2016.I.8
+- draft for version change: Tauola++ v1.1.6, TauSpinner v2.0.0
+- main upgrade: implementation of matrix element calculation 
+  for Tauspinner; case of parton parton --> tau tau jet jet.
+  Tests start to bring consistent results
+2014.VI.4
+- version change: Tauola++ v1.1.5, TauSpinner v1.4.0
+- examples and config scripts adapted to HepMC interface change
+  in Pythia8.180 or later
+- removed simplifications imposed on events generated with Pythia8
+  in examples/testing/ directory. Now events are generated with default
+  Pythia8 setup. Keep in mind that all your new results
+  generated for tests will have FSR and ISR
+  effects in produced samples, agreement with the reference results may 
+  expose the consequences (which disapear once  you switch off FSR and ISR).
+
+2014.VI.3
+- Functionality of TauSpinner extended. Transverse spin effects in Higgs-like 
+  object decays to pair of tau leptons and in its main background Drell-Yan
+  process installed. This is for Higgs CP parity studies. 
+- for this purpose, added additional directory TauSpinner/examples/CP-tests
+- documentation for these changes: preprint IFJPAN-IV-2014-9
+  by T. Przedzinski, E. Richter-Was and Z. Was, ``TauSpinner: a tool for 
+  simulating CP effects in ...''
+ 
+2014.IV.17
+- Fix for cases when TauSpinner is used after Tauola++ generation.
+  The case when this combination is used in KKMC needs testing.
+
+2014.IV.03
+- Added Tauola::setSeed( int, int, int ) for setting seed for TAUOLA-FORTRAN
+  random number generator
+
+2013.XII.11
+- Consistency of documentation makefile comments README files etc. 
+  Exceptional configurations of unusual origins of energy-momentum 
+  conservation repeated.  We could not explore all options
+  of production file formats. Users feed-back is needed, outcome must
+  wait for the future release.
+2013.XII.09
+- version change: Tauola++ v1.1.4, TauSpinner v1.3.2
+- new validation tests for TauSpinner added. They are available under sub-directory
+  TauSpinner/examples/tauspinner-validation. tauspinner-validation-plots.cxx
+  has been moved to this directory as well
+- check is now performed whether PDG value provided through function
+  Tauola::setHiggsScalarPseudoscalarPDG points to a particle of charge 0.
+2013.XI.29
+- option of reweighting CLEO to RChL currents using TauSpinner updated
+  and tested. An example 'tau-reweight-CLEO-to-RChL.cxx' added
+- unlucky choice of an example value for Tauola::setHiggsScalarPseudoscalarPDG in documentation
+  changed from 24 to 35
+2013.XI.18
+- fixed initialization for tauola radiation in leptonic decay channels
+2013.X.29
+- added RChL currents for 3-pi channel and Belle currents for 2-pi channel
+- new option 'Tauola::setNewCurrents(int mode)' for switching between
+  CLEO (mode=0) and RChL (mode=1) added
+- TauSpinner version changed to v1.3.1; added option Ipol=3
+2013.X.16
+- template for TauSpinner validation added
+- an example (examples/tauspinner-validation-plots.cxx) for generating
+  plots for this paper has been added
+2013.VI.12
+- include files cleaned up. Now it is required only to include main directory
+  TAUOLA/include
+- LCG scripts updated; added configuration option --enable-debug
+2013.V.28
+- Compatible with FORTRAN version, printout of TAUOLA initialization variables, 
+  added
+2013.IV.20
+- Prototype solution for matrix element based reweighting between Higgs 
+  and Z/gamma production processes added. Checks are not completed.
+2012.XII.12
+- features documented in S. Banerjee et al  CERN-PH-TH-2012-347 made 
+  into example. 
+2012.XI.20 
+- Thanks to Swagato Banerjee lack of numerical stability protection was spotted
+  in weight calculation of TauSpinner for leptonic tau decays with 
+  bremsstrahlung.
+- Fix is installed, but code version of SVN revision 707 in LCG 
+  is not free of the problem. 
+2012.XI.19
+- New functionality of TauSpinner finished
+- Still  more tests need to be desined and performed
+- but all basic ones seem to work OK. Physics content of nonSM 
+  not tested, work on that is not completed. 
+
+2012.XI.15
+- New option for TauSpinner completed. Basic tests finished.
+- Added option TauSpinner::set_nonSM_function(...) to set a user-provided
+  function for user-defined born calculation.
+- Added 'distr.f' to TauSpinner/examples as an example of use of the above
+  method.
+- Second new flag 'nonSMN' still must be checked.
+
+2012.XI.06
+- New option  dtrafted into TauSpinner. It is not checked at all.
+  For the time being controlling parameter 'nonSM2=0' should be used,
+  as in our tar-ball example 'tau-reweight-test.cxx'.
+  Backward comatibility tests were performed. Note that new parameter
+  supplement list of Tauspinner initialization method 'initialize_spinner()'
+
+2012.VII.27
+- version 1.1.0
+- TauSpinner library merged with Tauola distribution
+- Installation  of RChL currents prepared;     
+  (.so or .a) library alone or all FORTRAN directory
+
+2012.IV.30
+- Tauolapp namespace introduced
+- Communicate WARNING changed into WARNING from TAUOLA
+- checks of forward declarations cleaned
+- over all test on energy momentum conservation in a whole event added 
+  to examples.
+- checkMomentumConservation corrected to include energy as well
+- version no moved from 1.0.6 to 1.0.7  
+
+2011.XI.28
+- Added example of using interface without HepMC
+- Now interface can be compiled without HepMC by using:
+  ./configure --without-hepmc
+
+2011.XI.18
+- Fixed bug in scripts located in platform/LCGCONFIG directory.
+  It should have no effect on normal Tauola++ usage.
+  However, when Tauola++ libraries are compiled using LCG scripts,
+  some of the fortran routines used in user program may produce wrong results.
+
+2011.VIII.22
+- Several changes to documentation has been introduced, as requested by CPC Editor.
+- Header files are now under '$prefix/include/Tauola' directory,
+  changing include statements in all programs that use Tauola library.
+- Fixed names of the '--with' parameters in default configuration files.
+  Now all parameters are lower case.
+
+2011.VII.10
+- Bug in 'getZpolarization' where grandmother pdgid could become '-21' fixed.
+  Thanks to Julia Yarba for pointing out this bug and detailed feedback about
+  the cause.
+
+2011.IV.29
+- Method printing information on generated tau sample added Tauola::summary()
+
+2011.IV.28:
+- Fixed important kinematical mismatch in eta, k0 and pi0 decays.
+
+2011.IV.04:
+- work on release 1.0.4 completed
+- note that temporarily SVN Revision: 499 from March 21 was marked as 
+  release 1.0.4
+
+2011.III.31:
+- Fixed normalization for Plots for Fig3a and Fig4a
+- documentation fine tunig completed
+- Work on release 1.0.4 nearly completed, no changes to the code introduced.
+
+2011.III.16:
+- Added instalation scripts for LCG.
+
+2011.III.7:
+- Fixed problem with Tauola::setTaukle(...). Not working correctly.
+
+2011.III.2:
+- Fixed problem where calculation of mass of neutrino could result in NaN.
+  Thanks to Peter Rosendahl for pointing out this bug.
+
+2011.II.22:
+- Changed names of three routines:
+  Tauola::initialise -> Tauola::initialize
+  Tauola::setInitialisePhy -> Tauola::setInitializePhy
+  f_interface_tauolaInitialise -> f_interface_tauolaInitialize
+
+  Wrappers for old names of these routines had been introduced
+  for backward compatibility.
+
+2011.I.30:
+- updated documentation/readmes and makefiles for examples
+
+2011.I.28:
+- decayEndgame() is executed now when taus are boosted back to lab frame.
+  Thanks to Sho Iwamoto for pointing out previously present bug resulting in 
+ improper decay vertex position.
+
+- several modifications to internal part of the interface  introduced
+- unused files from 'examples' directory  moved to 'examples/attic'
+- Separate executable for  'examples/testing'  introduced. That is why
+   'examples/taumain_pythia_example.c' could be simplified.
+- plot class has been rewritten and it's usage is modified/simplified
+- added directory 'examples/testing/EW-PLOTS' for plots
+  using/testing tables generated in SANC module
+
+--
+2011.I.13:
+- several small bugs fixed thanks to feedback from Sho Iwamoto.
+
+2010.VI.30:
+- added routines to redefine tau decay channels on the flight
+- added 4th example - taummk_pythia_example.c
+- minor config modification (f77 + gcc34 and gfortran + gcc43 trick)
+
+2010.II.24:
+- functioning in case of cluster decaying into more than single tau-pair
+  improved, but spin correlations not under contro. Case like  
+  q bar q --> tau+ tau- nu_tau bar nu_tau g g gamma should be kept in mind.
+
+2010.II.20:
+- safety routines removed - bug in algorithm reducing multileg hard
+  processes to Born kinematics hopefully fixed.
+
+2010.II.13:
+- safety routines added to src/TauolaParticlePair.cxx.  Their role is to 
+  prevent segmentation
+  fault if offending event content is encountered in execution. 
+  Further work is expected. Input from program users
+  is of the great help.

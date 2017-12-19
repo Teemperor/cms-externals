@@ -1,0 +1,14 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f listIsajetTranslation.out
+
+./listIsajetTranslation@EXEEXT@ 
+
+cmd=`@DIFF_Q@ listIsajetTranslation.out @srcdir@/listIsajetTranslation.output`
+
+if [ -n "$cmd" ]; then
+  echo "listIsajetTranslation.out and @srcdir@/listIsajetTranslation.output differ"
+  exit 1;
+fi
+

@@ -1,0 +1,25 @@
+###############
+ex0: 
+analyse generated sample with MC-tester
+to report what is events composition (decay channels).
+In root files monitoring histograms for invariant masses
+of decay products. 
+###############
+To execute (after intialising environemtal variables,
+see README in deirectory example):
+
+make
+./test_ex0.exe <input_file>
+
+Executable print information and summary status.
+Histograms from default analysis with MC-Tester stored in 
+mc-tester.root 
+
+
+Spin weight calculated by TauSpinner is alwasy calculated,
+if the flag
+
+#define _SPIN_VALIDATION_ONLY_
+
+is used, weight is not propagated to the histograms filled
+by MC-Tester. 

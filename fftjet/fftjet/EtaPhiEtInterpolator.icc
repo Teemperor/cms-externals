@@ -1,0 +1,728 @@
+#include <cmath>
+#include <cassert>
+#include <cstring>
+#include <vector>
+#include <algorithm>
+
+#include "fftjet/binaryIO.hh"
+
+namespace fftjet {
+    template<typename Real>
+    template<typename InputReal>
+    InputReal EtaPhiEtInterpolator<Real>::determineCutoff(
+        const InputReal* data, const unsigned angleBins,
+        const unsigned eBins, const Real energyMin,
+        const Real energyMax, const Real dataFractionToIgnore)
+    {
+        assert(dataFractionToIgnore >= 0.0);
+        assert(dataFractionToIgnore < 1.0);
+
+        const InputReal zero = static_cast<InputReal>(0);
+        if (dataFractionToIgnore == 0.0)
+            return zero;
+
+        std::vector<InputReal> vec;
+        vec.reserve(angleBins*eBins);
+        const Real eStep = (energyMax - energyMin)/eBins;
+        const Real half = static_cast<Real>(0.5);
+        for (unsigned iangle=0; iangle<angleBins; ++iangle)
+        {
+            const InputReal* energyBuf = data + iangle*eBins;
+            for (unsigned i=0; i<eBins; ++i)
+            {
+                const InputReal e = energyMin + (i + half)*eStep;
+                if (energyBuf[i] > zero && e > zero)
+                    vec.push_back(e*energyBuf[i]);
+            }
+        }
+
+        // Make sure input data is not empty
+        const unsigned vSize = vec.size();
+        assert(vSize);
+        if (vSize < 2)
+            return zero;
+
+        std::sort(vec.begin(), vec.end());
+        long double totalSum = 0.0L;
+        for (unsigned i=0; i<vSize; ++i)
+            totalSum += vec[i];
+
+        const long double sumCut = totalSum*dataFractionToIgnore;
+        totalSum = 0.0L;
+        for (unsigned i=0; i<vSize; ++i)
+        {
+            totalSum += vec[i];
+            if (totalSum > sumCut)
+            {
+                if (i)
+                    return (vec[i] + vec[i-1])/2.0;
+                else
+                    return vec[i]/2.0;
+            }
+        }
+
+        return (vec[vSize-1] + vec[vSize-2])/2.0;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::binSize() const
+    {
+        return etaRange_/nEta_*2.0*M_PI/nPhi_*energyRange_/nEnergy_;
+    }
+
+    template<typename Real>
+    template <typename InputReal>
+    EtaPhiEtInterpolator<Real>::EtaPhiEtInterpolator(
+        const InputReal* data, const Real dataFractionToIgnore,
+        const unsigned nEtaBins, const Real etaMin, const Real etaMax,
+        const unsigned nPhiBins, const Real phiBin0Edge,
+        const unsigned nEnergyBins, const Real energyMin, const Real energyMax,
+        const char* title)
+        : data_(0),
+          binBounds_(0),
+          title_(title),
+          ignoredFraction_(dataFractionToIgnore),
+          totalEnergy_(0),
+          totalCount_(0),
+          phiBinWidth_(2.0*M_PI/nPhiBins),
+          etaMin_(etaMin),
+          etaMax_(etaMax),
+          etaRange_(etaMax - etaMin),
+          phiBin0Edge_(phiBin0Edge),
+          energyMin_(energyMin),
+          energyMax_(energyMax),
+          energyRange_(energyMax - energyMin),
+          nEta_(nEtaBins),
+          nPhi_(nPhiBins),
+          nEnergy_(nEnergyBins)
+    {
+        assert(data);
+        assert(nEta_);
+        assert(nPhi_);
+        assert(nEnergy_);
+        assert(etaRange_ > 0.0);
+        assert(energyRange_ > 0.0);
+
+        // There must be no negative energies
+        assert(energyMin_ + 0.5*energyRange_/nEnergy_ >= 0.0);
+
+        // Determine the energy cutoff
+        const unsigned nAngle = nEta_*nPhi_;
+        const InputReal cut = determineCutoff(data, nAngle, nEnergy_,
+                                              energyMin, energyMax,
+                                              dataFractionToIgnore);
+
+        // Memory buffer for the bin boundaries
+        binBounds_ = new unsigned[nAngle + 1];
+
+        // Cycle over angle bins and determine how many
+        // energy bins we must store
+        binBounds_[0] = 0;
+        const Real eStep = (energyMax - energyMin)/nEnergy_;
+        const Real half = static_cast<Real>(0.5);
+        for (unsigned iangle=0; iangle<nAngle; ++iangle)
+        {
+            const InputReal* energyBuf = data + iangle*nEnergy_;
+            int i = nEnergy_ - 1;
+            for (; i >= 0; --i)
+            {
+                const InputReal e = energyMin + (i + half)*eStep;
+                if (e*energyBuf[i] > cut)
+                    break;
+            }
+            binBounds_[iangle + 1] = binBounds_[iangle] + (i + 1);
+        }
+
+        // Allocate memory buffers
+        data_ = new Real[binBounds_[nAngle]];
+
+        // Run various calculations
+        long double totalSum = 0.0L, totalMulti = 0.0L;
+        for (unsigned iangle=0; iangle<nAngle; ++iangle)
+        {
+            const InputReal* energyBuf = data + iangle*nEnergy_;
+            Real* localBuf = data_ + binBounds_[iangle];
+            const unsigned len = binBounds_[iangle + 1] - binBounds_[iangle];
+            long double sum = 0.0L, multi = 0.0L;
+            for (unsigned i=0; i<len; ++i)
+            {
+                const Real e = energyMin + (i + half)*eStep;
+                localBuf[i] = energyBuf[i];
+                sum += e*localBuf[i];
+                totalMulti += localBuf[i];
+            }
+            totalSum += sum;
+            totalMulti += multi;
+        }
+        totalEnergy_ = totalSum*binSize();
+        totalCount_ = totalMulti*binSize();
+    }
+
+    template<typename Real>
+    EtaPhiEtInterpolator<Real>::EtaPhiEtInterpolator(Real* data,
+                     unsigned* binBounds,
+                     Real energyFractionToIgnore,
+                     Real totalEnergy, Real totalCount,
+                     unsigned nEtaBins, Real etaMin, Real etaMax,
+                     unsigned nPhiBins, Real phiBin0Edge,
+                     unsigned nEnergyBins, Real energyMin, Real energyMax,
+                     const char* title)
+        
+        : data_(data),
+          binBounds_(binBounds),
+          title_(title),
+          ignoredFraction_(energyFractionToIgnore),
+          totalEnergy_(totalEnergy),
+          totalCount_(totalCount),
+          phiBinWidth_(2.0*M_PI/nPhiBins),
+          etaMin_(etaMin),
+          etaMax_(etaMax),
+          etaRange_(etaMax - etaMin),
+          phiBin0Edge_(phiBin0Edge),
+          energyMin_(energyMin),
+          energyMax_(energyMax),
+          energyRange_(energyMax - energyMin),
+          nEta_(nEtaBins),
+          nPhi_(nPhiBins),
+          nEnergy_(nEnergyBins)
+    {
+        assert(data);
+        assert(binBounds);
+        assert(title);
+        assert(nEta_);
+        assert(nPhi_);
+        assert(nEnergy_);
+        assert(etaRange_ > 0.0);
+        assert(energyRange_ > 0.0);
+        assert(energyMin_ + 0.5*energyRange_/nEnergy_ >= 0.0);
+    }
+
+    template<typename Real>
+    inline EtaPhiEtInterpolator<Real>::~EtaPhiEtInterpolator()
+    {
+        delete [] data_;
+        delete [] binBounds_;
+    }
+
+    template<typename Real>
+    EtaPhiEtInterpolator<Real>::EtaPhiEtInterpolator(
+        const EtaPhiEtInterpolator<Real>& r)
+        : data_(0),
+          binBounds_(0),
+          title_(r.title_),
+          ignoredFraction_(r.ignoredFraction_),
+          totalEnergy_(r.totalEnergy_),
+          totalCount_(r.totalCount_),
+          phiBinWidth_(r.phiBinWidth_),
+          etaMin_(r.etaMin_),
+          etaMax_(r.etaMax_),
+          etaRange_(r.etaRange_),
+          phiBin0Edge_(r.phiBin0Edge_),
+          energyMin_(r.energyMin_),
+          energyMax_(r.energyMax_),
+          energyRange_(r.energyRange_),
+          nEta_(r.nEta_),
+          nPhi_(r.nPhi_),
+          nEnergy_(r.nEnergy_)
+    {
+        const unsigned nAngle = nEta_*nPhi_;
+        binBounds_ = new unsigned[nAngle + 1];
+        for (unsigned i=0; i<=nAngle; ++i)
+            binBounds_[i] = r.binBounds_[i];
+
+        const unsigned dS = binBounds_[nAngle];
+        data_ = new Real[dS];
+
+        for (unsigned i=0; i<dS; ++i)
+            data_[i] = r.data_[i];
+    }
+
+    template<typename Real>
+    EtaPhiEtInterpolator<Real>& EtaPhiEtInterpolator<Real>::operator=(
+        const EtaPhiEtInterpolator<Real>& r)
+    {
+        if (this == &r)
+            return *this;
+        title_ = r.title_;
+        ignoredFraction_ = r.ignoredFraction_;
+        totalEnergy_ = r.totalEnergy_;
+        totalCount_ = r.totalCount_;
+        phiBinWidth_ = r.phiBinWidth_;
+        etaMin_ = r.etaMin_;
+        etaMax_ = r.etaMax_;
+        etaRange_ = r.etaRange_;
+        phiBin0Edge_ = r.phiBin0Edge_;
+        energyMin_ = r.energyMin_;
+        energyMax_ = r.energyMax_;
+        energyRange_ = r.energyRange_;
+        nEta_ = r.nEta_;
+        nPhi_ = r.nPhi_;
+        nEnergy_ = r.nEnergy_;
+
+        delete [] data_;
+        delete [] binBounds_;
+
+        const unsigned nAngle = nEta_*nPhi_;
+        binBounds_ = new unsigned[nAngle + 1];
+        for (unsigned i=0; i<=nAngle; ++i)
+            binBounds_[i] = r.binBounds_[i];
+
+        const unsigned dS = binBounds_[nAngle];
+        data_ = new Real[dS];
+
+        for (unsigned i=0; i<dS; ++i)
+            data_[i] = r.data_[i];
+
+        return *this;
+    }
+
+    template<typename Real>
+    inline void EtaPhiEtInterpolator<Real>::setTitle(const char* newtitle)
+    {
+        title_ = newtitle;
+    }
+
+    template<typename Real>
+    inline unsigned EtaPhiEtInterpolator<Real>::nEta() const
+    {
+        return nEta_;
+    }
+
+    template<typename Real>
+    inline unsigned EtaPhiEtInterpolator<Real>::nPhi() const
+    {
+        return nPhi_;
+    }
+
+    template<typename Real>
+    inline unsigned EtaPhiEtInterpolator<Real>::nEnergy() const
+    {
+        return nEnergy_;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::ignoredFraction() const
+    {
+        return ignoredFraction_;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::etaMin() const
+    {
+        return etaMin_;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::etaMax() const
+    {
+        return etaMax_;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::phiBin0Edge() const
+    {
+        return phiBin0Edge_;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::energyMin() const
+    {
+        return energyMin_;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::energyMax() const
+    {
+        return energyMax_;
+    }
+
+    template<typename Real>
+    inline const char* EtaPhiEtInterpolator<Real>::title() const
+    {
+        return title_.c_str();
+    }
+
+    template<typename Real>
+    inline unsigned EtaPhiEtInterpolator<Real>::zeroSuppressedBufLen() const
+    {
+        return binBounds_[nEta_*nPhi_];
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::totalEnergy() const
+    {
+        return totalEnergy_;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::multiplicity() const
+    {
+        return totalCount_;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::binValue(const unsigned etaBin,
+                                             const unsigned phiBin,
+                                             const unsigned eBin) const
+    {
+        assert(etaBin < nEta_);
+        assert(phiBin < nPhi_);
+        assert(eBin < nEnergy_);
+        const unsigned idx(etaBin*nPhi_ + phiBin);
+        if (eBin < binBounds_[idx + 1] - binBounds_[idx])
+            return data_[binBounds_[idx] + eBin];
+        else
+            return 0;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::uncheckedAt(const unsigned etaBin,
+                                                const unsigned phiBin,
+                                                const unsigned eBin) const
+    {
+        const unsigned idx(etaBin*nPhi_ + phiBin);
+        if (eBin < binBounds_[idx + 1] - binBounds_[idx])
+            return data_[binBounds_[idx] + eBin];
+        else
+            return 0;
+    }
+
+    template<typename Real>
+    inline int EtaPhiEtInterpolator<Real>::getEtaBin(const Real eta) const
+    {
+        return static_cast<int>(floor((eta - etaMin_)*nEta_/etaRange_));
+    }
+
+    template<typename Real>
+    inline unsigned EtaPhiEtInterpolator<Real>::getPhiBin(const Real phi) const
+    {
+        const int nphi(static_cast<int>(nPhi_));
+        int iphi(static_cast<int>(floor((phi - phiBin0Edge_)/
+                                        phiBinWidth_)) % nphi);
+        if (iphi < 0)
+            iphi += nphi;
+        return iphi;
+    }
+
+    template<typename Real>
+    inline int EtaPhiEtInterpolator<Real>::getEnergyBin(const Real et) const
+    {
+        return static_cast<int>(floor((et-energyMin_)*nEnergy_/energyRange_));
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::etaBinCenter(const int etaBin) const
+    {
+        return etaMin_ + (etaBin + static_cast<Real>(1)/2)*etaRange_/nEta_;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::energyBinCenter(const int eBin) const
+    {
+        return energyMin_ + (eBin + static_cast<Real>(1)/2)*energyRange_/nEnergy_;
+    }
+
+    template<typename Real>
+    inline Real EtaPhiEtInterpolator<Real>::phiBinCenter(const unsigned phiBin) const
+    {
+        return phiBin0Edge_ + (phiBin + static_cast<Real>(1)/2)*phiBinWidth_;
+    }
+
+    template<typename Real>
+    Real EtaPhiEtInterpolator<Real>::operator()(const Real eta,
+                                                const Real phi,
+                                                const Real et) const
+    {
+        const Real half = static_cast<Real>(0.5);
+
+        int ie(getEnergyBin(et));
+        if (ie < 0 || ie > static_cast<int>(nEnergy_))
+            return 0;
+        Real de = (et - energyMin_)*nEnergy_/energyRange_ - ie;
+        if (de >= half)
+            de -= half;
+        else
+        {
+            ie -= 1;
+            de += half;
+        }
+
+        int ieta(getEtaBin(eta));
+        if (ieta < -1 || ieta > static_cast<int>(nEta_))
+            return 0;
+        Real deta = (eta - etaMin_)*nEta_/etaRange_ - ieta;
+        if (deta >= half)
+            deta -= half;
+        else
+        {
+            ieta -= 1;
+            deta += half;
+        }
+
+        unsigned iphi(getPhiBin(phi));
+        Real dphi = (phi - phiBin0Edge_)/phiBinWidth_ - iphi;
+        while (dphi >= nPhi_)
+            dphi -= nPhi_;
+        while (dphi < 0)
+            dphi += nPhi_;
+        if (dphi >= half)
+            dphi -= half;
+        else
+        {
+            iphi = (iphi + nPhi_ - 1) % nPhi_;
+            dphi += half;
+        }
+
+        double sum = 0.0;
+        for (int i=0; i<2; ++i)
+        {
+            const double wi = i ? deta : 1.0 - deta;
+            const int etabin = i+ieta;
+            if (etabin >= 0 && etabin < static_cast<int>(nEta_))
+            {
+                for (unsigned j=0; j<2; ++j)
+                {
+                    const double wj = wi*(j ? dphi : 1.0 - dphi);
+                    const unsigned phibin = (iphi + j) % nPhi_;
+                    const unsigned idx(etabin*nPhi_ + phibin);
+                    const int nebin = binBounds_[idx+1] - binBounds_[idx];
+                    for (int k=0; k<2; ++k)
+                    {
+                        int ebin = ie + k;
+                        if (ebin < 0)
+                            ebin = 0;
+                        if (ebin < nebin)
+                            sum += wj*(k ? de : 1.0 - de)*
+                                data_[binBounds_[idx] + ebin];
+                    }
+                }
+            }
+        }
+
+        return sum;
+    }
+
+    template<typename Real>
+    Real EtaPhiEtInterpolator<Real>::maxNon0Energy(const Real eta,
+                                                   const Real phi) const
+    {
+        const Real half = static_cast<Real>(0.5);
+
+        int ieta(getEtaBin(eta));
+        if (ieta < -1 || ieta > static_cast<int>(nEta_))
+            return 0;
+        Real deta = (eta - etaMin_)*nEta_/etaRange_ - ieta;
+        if (deta >= half)
+            deta -= half;
+        else
+        {
+            ieta -= 1;
+            deta += half;
+        }
+
+        unsigned iphi(getPhiBin(phi));
+        Real dphi = (phi - phiBin0Edge_)/phiBinWidth_ - iphi;
+        while (dphi >= nPhi_)
+            dphi -= nPhi_;
+        while (dphi < 0)
+            dphi += nPhi_;
+        if (dphi >= half)
+            dphi -= half;
+        else
+        {
+            iphi = (iphi + nPhi_ - 1) % nPhi_;
+            dphi += half;
+        }
+
+        double sum = 0.0;
+        for (int i=0; i<2; ++i)
+        {
+            const double wi = i ? deta : 1.0 - deta;
+            const int etabin = i+ieta;
+            if (etabin >= 0 && etabin < static_cast<int>(nEta_))
+            {
+                for (unsigned j=0; j<2; ++j)
+                {
+                    const double wj = wi*(j ? dphi : 1.0 - dphi);
+                    const unsigned phibin = (iphi + j) % nPhi_;
+                    const unsigned idx(etabin*nPhi_ + phibin);
+                    const unsigned nebin = binBounds_[idx+1] - binBounds_[idx];
+                    sum += wj*(energyMin_ + nebin*energyRange_/nEnergy_);
+                }
+            }
+        }
+
+        return sum;
+    }
+
+    template<typename Real>
+    bool EtaPhiEtInterpolator<Real>::operator==(
+        const EtaPhiEtInterpolator<Real>& r) const
+    {
+        if (!(title_ == r.title_ &&
+              ignoredFraction_ == r.ignoredFraction_ &&
+              totalEnergy_ == r.totalEnergy_ &&
+              totalCount_ == r.totalCount_ &&
+              phiBinWidth_ == r.phiBinWidth_ &&
+              etaMin_ == r.etaMin_ &&
+              etaMax_ == r.etaMax_ &&
+              etaRange_ == r.etaRange_ &&
+              phiBin0Edge_ == r.phiBin0Edge_ &&
+              energyMin_ == r.energyMin_ &&
+              energyMax_ == r.energyMax_ &&
+              energyRange_ == r.energyRange_ &&
+              nEta_ == r.nEta_ &&
+              nPhi_ == r.nPhi_ &&
+              nEnergy_ == r.nEnergy_))
+            return false;
+
+        const unsigned nAngle = nEta_*nPhi_;
+        for (unsigned i=0; i<=nAngle; ++i)
+            if (binBounds_[i] != r.binBounds_[i])
+                return false;
+
+        const unsigned dataSize = binBounds_[nAngle];
+        for (unsigned i=0; i<dataSize; ++i)
+            if (data_[i] != r.data_[i])
+                return false;
+
+        return true;
+    }
+
+    template<typename Real>
+    void EtaPhiEtInterpolator<Real>::scaleData(const Real scaleFactor)
+    {
+        assert(scaleFactor > static_cast<Real>(0));
+
+        const unsigned dataSize = binBounds_[nEta_*nPhi_];
+        for (unsigned i=0; i<dataSize; ++i)
+            data_[i] *= scaleFactor;
+
+        totalEnergy_ *= scaleFactor;
+        totalCount_ *= scaleFactor;
+    }
+
+    template<typename Real>
+    bool EtaPhiEtInterpolator<Real>::write(std::ostream& of) const
+    {
+        // Write order:
+        //
+        // total length (not including this word)  -- unsigned
+        // class id                                -- unsigned
+        // version #                               -- unsigned
+        //
+        // everything else in a convenient order
+        //
+        const long plen = of.tellp();
+        unsigned u = 0;
+        write_pod(of, u);
+
+        const long objstart = of.tellp();
+        u = classId();
+        write_pod(of, u);
+
+        u = version();
+        write_pod(of, u);
+
+        u = strlen(title_.c_str());
+        write_pod(of, u);
+        write_pod_array(of, title_.c_str(), u);
+
+        write_pod(of, ignoredFraction_);
+        write_pod(of, totalEnergy_);
+        write_pod(of, totalCount_);
+        write_pod(of, etaMin_);
+        write_pod(of, etaMax_);
+        write_pod(of, phiBin0Edge_);
+        write_pod(of, energyMin_);
+        write_pod(of, energyMax_);
+        write_pod(of, nEta_);
+        write_pod(of, nPhi_);
+        write_pod(of, nEnergy_);
+
+        write_pod_array(of, binBounds_, nEta_*nPhi_ + 1);
+        write_pod_array(of, data_, binBounds_[nEta_*nPhi_]);
+
+        const long here = of.tellp();
+        of.seekp(plen);
+        u = here - objstart;
+        write_pod(of, u);
+        of.seekp(here);
+
+        return !of.bad() && !of.fail();
+    }
+
+    template<typename Real>
+    EtaPhiEtInterpolator<Real>* EtaPhiEtInterpolator<Real>::read(
+        std::istream& in)
+    {
+        unsigned len;
+        read_pod(in, &len);
+
+        const long objstart = in.tellg();
+        unsigned u;
+        read_pod(in, &u);
+        if (u != classId())
+            return 0;
+
+        read_pod(in, &u);
+        if (u != version())
+            return 0;
+
+        read_pod(in, &u);
+        char* title = new char[u+1];
+        read_pod_array(in, title, u);
+        title[u] = '\0';
+
+        Real ignoredFraction;
+        Real totalEnergy;
+        Real totalCount;
+        Real etaMin;
+        Real etaMax;
+        Real phiBin0Edge;
+        Real energyMin;
+        Real energyMax;
+        unsigned nEta;
+        unsigned nPhi;
+        unsigned nEnergy;
+
+        read_pod(in, &ignoredFraction);
+        read_pod(in, &totalEnergy);
+        read_pod(in, &totalCount);
+        read_pod(in, &etaMin);
+        read_pod(in, &etaMax);
+        read_pod(in, &phiBin0Edge);
+        read_pod(in, &energyMin);
+        read_pod(in, &energyMax);
+        read_pod(in, &nEta);
+        read_pod(in, &nPhi);
+        read_pod(in, &nEnergy);
+
+        unsigned* binBounds = new unsigned[nEta*nPhi + 1];
+        read_pod_array(in, binBounds, nEta*nPhi + 1);
+
+        Real* data = new Real[binBounds[nEta*nPhi]];
+        read_pod_array(in, data, binBounds[nEta*nPhi]);
+
+        EtaPhiEtInterpolator* interp = 0;
+
+        // Check that the record length is correct
+        const long here = in.tellg();
+        u = here - objstart;
+        if (!in.bad() && !in.fail() && len == u)
+        {
+            interp = new EtaPhiEtInterpolator(
+                data, binBounds, ignoredFraction,
+                totalEnergy, totalCount, nEta, etaMin, etaMax,
+                nPhi, phiBin0Edge, nEnergy, energyMin, energyMax, title);
+        }
+        else
+        {
+            delete [] data;
+            delete [] binBounds;
+        }
+
+        delete [] title;
+        return interp;
+    }
+}

@@ -1,0 +1,11 @@
+            Z Events:
+  10000000  Total
+   2501052  mu-, e- vs mu+, e+
+   1251897  mu-, e- vs pi+
+   1248820  pi- vs mu+, e+
+    624890  pi- vs pi+
+   1249843  mu-, e- vs rho+
+   1249136  rho- vs mu+, e+
+    624102  pi- vs rho+
+    625707  rho- vs pi+
+    624553  rho- vs rho+

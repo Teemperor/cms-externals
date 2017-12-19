@@ -1,0 +1,36 @@
+#include "fftjet/KernelVectorRecombinationAlg.hh"
+#include "fftjet/EtSumVectorRecombinationAlg.hh"
+#include "fftjet/EtCentroidVectorRecombinationAlg.hh"
+
+namespace fftjet {
+    template
+    <
+        typename VectorLike,
+        typename BgData,
+        typename VBuilder
+    >
+    DefaultVectorRecombinationAlgFactory<VectorLike,BgData,VBuilder>::
+    DefaultVectorRecombinationAlgFactory()
+    {
+        (*this)["Kernel"] = new VectorRecombinationAlgFactory<
+            KernelVectorRecombinationAlg,VectorLike,BgData,VBuilder>;
+        (*this)["EtCentroid"] = new VectorRecombinationAlgFactory<
+            EtCentroidVectorRecombinationAlg,VectorLike,BgData,VBuilder>;
+        (*this)["EtSum"] = new VectorRecombinationAlgFactory<
+            EtSumVectorRecombinationAlg,VectorLike,BgData,VBuilder>;
+    }
+
+    template
+    <
+        typename VectorLike,
+        typename BgData,
+        typename VBuilder
+    >
+    DefaultVectorRecombinationAlgFactory<VectorLike,BgData,VBuilder>::
+    ~DefaultVectorRecombinationAlgFactory()
+    {
+        for (typename std::map<std::string, BaseFactory *>::iterator it =
+                 this->begin(); it != this->end(); ++it)
+            delete it->second;
+    }
+}

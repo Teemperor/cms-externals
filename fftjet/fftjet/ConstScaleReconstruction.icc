@@ -1,0 +1,86 @@
+#include <cassert>
+
+#include "fftjet/convertPeakCoords.hh"
+#include "fftjet/AbsPeakSelector.hh"
+
+namespace fftjet {
+    template<typename Real, typename VectorLike, typename BgData>
+    ConstScaleReconstruction<Real,VectorLike,BgData>::~ConstScaleReconstruction()
+    {
+        delete [] convolvedData_;
+        delete copyGrid;
+    }
+
+    template<typename Real, typename VectorLike, typename BgData>
+    ConstScaleReconstruction<Real,VectorLike,BgData>::ConstScaleReconstruction(
+            AbsConvolverBase<Real>* convolver,
+            Functor1<bool,Peak>* selector,
+            const PeakFinder& peakFinder,
+            AbsRecombinationAlg<Real,VectorLike,BgData>* recombiner,
+            const double etPower)
+        : convolver_(convolver),
+          selector_(selector),
+          peakFinder_(peakFinder),
+          recombiner_(recombiner),
+          nEta_(convolver->nEtaFFT()),
+          nPhi_(convolver->nPhiFFT()),
+          convolvedData_(new Real[nEta_*nPhi_]),
+          etPower_(etPower),
+          copyGrid(0)
+    {
+        assert(convolver_);
+        assert(selector_);
+        assert(recombiner_);
+        assert(etPower_ >= 0.0);
+    }
+
+    template<typename Real, typename VectorLike, typename BgData>
+    int ConstScaleReconstruction<Real,VectorLike,BgData>::run(
+        const double scale,
+        const Grid2d<Real>& eventData,
+        const BgData* bgData, const unsigned nBgEta, const unsigned nBgPhi,
+        std::vector<RecombinedJet<VectorLike> >* outputJets,
+        VectorLike* unclustered, double* unused)
+    {
+        // Run the convolver
+        if (etPower_ == 1.0)
+            convolver_->setEventData(eventData.data(),
+                                     eventData.nEta(), eventData.nPhi());
+        else
+        {
+            if (copyGrid == 0)
+                copyGrid = new Grid2d<Real>(eventData);
+            else
+                copyGrid->blockSet(eventData.data(),
+                                   eventData.nEta(), eventData.nPhi());
+            copyGrid->power(etPower_);
+            convolver_->setEventData(copyGrid->data(),
+                                     copyGrid->nEta(), copyGrid->nPhi());
+        }
+        convolver_->convolveWithKernel(scale, convolvedData_, nEta_, nPhi_);
+
+        // Find the peaks
+        peakFinder_.find(convolvedData_, nEta_, nPhi_, &peaks);
+
+        // Convert the peak positions from cell width units
+        // into normal eta/phi units
+        convertPeakCoords(eventData, &peaks);
+
+        // Run the peak selector
+        AbsPeakSelector<Real>* sel = dynamic_cast<AbsPeakSelector<Real>*>(
+            selector_);
+        if (sel) sel->setEventData(eventData);
+
+        const unsigned nPeaks(peaks.size());
+        for (unsigned i=0; i<nPeaks; ++i)
+        {
+            peaks[i].setScale(scale);
+            if (!(*selector_)(peaks[i]))
+                peaks[i].setMembershipFactor(0.0);
+        }
+
+        // Run the recombination algorithm
+        return recombiner_->run(peaks, eventData, bgData, nBgEta, nBgPhi,
+                                outputJets, unclustered, unused);
+    }
+}

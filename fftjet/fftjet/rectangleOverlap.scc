@@ -1,0 +1,238 @@
+#ifndef FFTJET_RECTANGLEOVERLAP_SCC_
+#define FFTJET_RECTANGLEOVERLAP_SCC_
+
+#include <cmath>
+#include <utility>
+#include <vector>
+#include <cassert>
+
+template <typename T>
+inline static void swap_if_larger(T &x1, T &x2)
+{
+    if (x1 > x2)
+    {
+        T d(x1);
+        x1 = x2;
+        x2 = d;
+    }
+}
+
+inline static int sgn(const double v)
+{
+    if (v > 0.0)
+        return 1;
+    else if (v < 0.0)
+        return -1;
+    else
+        return 0;
+}
+
+inline static int point_sign(const double x, const double y,
+                             const std::pair<double, double>& p0,
+                             const std::pair<double, double>& p1)
+{
+    const double dx = x - p0.first;
+    const double dy = y - p0.second;
+    const double xref = p1.first - p0.first;
+    const double yref = p1.second - p0.second;
+    return sgn(dx*yref - dy*xref);
+}
+
+// The following function works for convex polygons only
+static bool is_point_inside_poly(
+    const double x, const double y,
+    const std::vector<std::pair<double, double> >& poly)
+{
+    const unsigned nm1(poly.size() - 1);
+    int s0 = point_sign(x, y, poly[nm1], poly[0]);
+    for (unsigned i=0; i<nm1; ++i)
+    {
+        const int s = point_sign(x, y, poly[i], poly[i+1]);
+        if (s0)
+        {
+            if (s && s != s0)
+                return false;
+        }
+        else
+            s0 = s;
+    }
+    return true;
+}
+
+// The execution time of the following test is quadratic in the number of
+// vertices N. This is OK for the low N polygons we normally expect.
+static bool is_poly_convex(const std::vector<std::pair<double, double> >& poly)
+{
+    const unsigned psize(poly.size());
+    if (psize <= 3)
+        return true;
+    int s0 = 0;
+    for (unsigned i0=0; i0<psize; ++i0)
+    {
+        const unsigned i1((i0+1)%psize);
+        for (unsigned j=0; j<psize; ++j)
+        {
+            if (j != i0 && j != i1)
+            {
+                const int s = point_sign(poly[j].first, poly[j].second,
+                                         poly[i0], poly[i1]);
+                if (s0)
+                {
+                    if (s && s != s0)
+                        return false;
+                }
+                else
+                    s0 = s;
+            }
+        }
+    }
+    return true;
+}
+
+// The following function works for convex polygons only.
+// The area is positive for the polygons traversed clockwise.
+static double polygon_area(const std::vector<std::pair<double, double> >& poly)
+{
+    const unsigned psize(poly.size());
+    if (psize < 3)
+        return 0.0;
+    if (psize == 3)
+    {
+        const double dx1(poly[1].first - poly[0].first);
+        const double dy1(poly[1].second - poly[0].second);
+        const double dx2(poly[2].first - poly[0].first);
+        const double dy2(poly[2].second - poly[0].second);
+        return (dy1*dx2 - dx1*dy2)/2.0;
+    }
+
+    // Shift the center of coordinates to some point inside the polygon.
+    // This avoids amplification of round-off errors when the polygon
+    // is far away from (0, 0).
+    const double xref((poly[psize/2].first + poly[0].first)/2.0);
+    const double yref((poly[psize/2].second + poly[0].second)/2.0);
+
+    long double sum = 0.0L;
+    double xold = poly[psize - 1].first - xref;
+    double yold = poly[psize - 1].second - yref;
+    for (unsigned i=0; i<psize; ++i)
+    {
+        const double dx(poly[i].first - xref);
+        const double dy(poly[i].second - yref);
+        sum += dx*yold;
+        sum -= dy*xold;
+        xold = dx;
+        yold = dy;
+    }
+    return static_cast<double>(sum)/2.0;
+}
+
+// The following function calculates intersections of two segments
+// s0 and s1 and appends them to the given vector. There can be 0, 1, or 2
+// intersections (2 intersections are posible in case of overlapping
+// parallel segments).
+static void append_intersections(const std::pair<double, double>& s0_start,
+                                 const std::pair<double, double>& s0_end,
+                                 const std::pair<double, double>& s1_start,
+                                 const std::pair<double, double>& s1_end,
+                                 std::vector<std::pair<double, double> >* vec)
+{
+    // Minimalistic 2d vector class. Useful for
+    // organizing subsequent calculations.
+    struct Vector2
+    {
+        inline Vector2(const std::pair<double, double>& p1,
+                       const std::pair<double, double>& p0) : 
+            x(p1.first-p0.first), y(p1.second-p0.second) {}
+
+        inline double length() const {
+            if (x == 0.0)
+                return fabs(y);
+            else if (y == 0.0)
+                return fabs(x);
+            else
+                return sqrt(x*x + y*y);
+        }
+        inline double dot(const Vector2& r) const {return x*r.x + y*r.y;}
+        inline double cross(const Vector2& r) const {return x*r.y - y*r.x;}
+
+        const double x;
+        const double y;
+
+    private:
+        Vector2();
+    };
+
+    const Vector2 v(s0_end, s0_start);
+    const double len(v.length());
+    assert(len > 0.0);
+    const Vector2 sv(s1_end, s1_start);
+    const Vector2 delta(s1_start, s0_start);
+    const double det(v.cross(sv));
+
+    if (det == 0.0)
+    {
+        // Segment vectors are parallel
+        if (v.cross(delta) == 0.0)
+        {
+            // And they lie on the same line.
+            // Check the length of the second vector.
+            // If it has null length, we can skip subsequent
+            // calculations due to the expected manner in which
+            // this function will be used.
+            if (sv.length() > 0.0)
+            {
+                double xstart = v.dot(delta)/len;
+                double xend = v.dot(Vector2(s1_end, s0_start))/len;
+                if (!((xstart < 0.0 && xend < 0.0) ||
+                      (xstart > len && xend > len)))
+                {
+                    swap_if_larger(xstart, xend);
+                    double xmin = 1.0, xmax = 0.0;
+
+                    // Is segment 0 inside segment 1?
+                    if (xstart <= 0.0 && xend >= len)
+                    {
+                        xmin = 0.0;
+                        xmax = len;
+                    }
+                    // Is segment 1 inside segment 0?
+                    else if (xstart >= 0.0 && xend <= len)
+                    {
+                        xmin = xstart;
+                        xmax = xend;
+                    }
+                    // The segments must overlap somewhere
+                    else if (xstart >= 0.0)
+                    {
+                        xmin = xstart;
+                        xmax = len;
+                    }
+                    else if (xend >= 0.0 && xend <= len)
+                    {
+                        xmin = 0.0;
+                        xmax = xend;
+                    }
+                    assert(xmin <= xmax);
+                    const double dx = v.x/len;
+                    const double dy = v.y/len;
+                    vec->push_back(std::make_pair(s0_start.first + dx*xmin,
+                                                  s0_start.second + dy*xmin));
+                    vec->push_back(std::make_pair(s0_start.first + dx*xmax,
+                                                  s0_start.second + dy*xmax));
+                }
+            }
+        }
+    }
+    else
+    {
+        // There must be a solution for the line crossing point
+        const double t1(delta.cross(sv)/det);
+        const double t2(delta.cross(v)/det);
+        if (t1 >= 0.0 && t1 <= 1.0 && t2 >= 0.0 && t2 <= 1.0)
+            vec->push_back(std::make_pair(
+                               s0_start.first*(1.0 - t1) + s0_end.first*t1,
+                               s0_start.second*(1.0 - t1) + s0_end.second*t1));
+    }
+}
+
+#endif // FFTJET_RECTANGLEOVERLAP_SCC_

@@ -1,0 +1,868 @@
+===============================
+01.12.09 Release HepPDT-3.04.01 
+===============================
+
+2009-11-24  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPID/ParticleIDMethods.hh: add isQBall and charge
+	* src/HepPID/ParticleIDMethods.cc: add isQBall, isDyon, and charge
+	  get correct Q-ball charge
+	* src/HepPID/ParticleName.cc: add black hole, create Q-ball names,
+	  make sure all names are unique strings
+	* tests/HepPID/testParticleIDMethods.cc: add dyons and Q-balls
+
+	* include/HepPDT/ParticleID.hh: add isQBall, isDyon, and charge
+	* include/HepPDT/ParticleData.hh: add isQBall and isDyon
+	* src/HepPDT/ParticleID.cc: add isQBall, isDyon, and charge
+	  get correct charge for dyons and Q-balls
+	* src/HepPDT/quarks.cc: quark list is empty for dyons and Q-balls
+	* src/HepPDT/addParticleTable.cc: deal with Q-ball charge
+	* tests/HepPDT/testHepPDT.cc, testPID.cc: add dyons and Q-balls
+	* tests/HepPDT/testReadParticleTable.cc.in: read extras.tbl
+
+2009-11-20  Lynn Garren <garren@fnal.gov>
+
+	* configure.ac, */Makefile.am: stop using libtool
+	remove VCMakefile.in files
+
+2009-11-06  Lynn Garren <garren@fnal.gov>
+	* include/HepPID/ParticleIDMethods.hh: add isDyon
+	* src/HepPID/ParticleIDMethods.cc: get correct Dyon (monopole) charge
+	* src/HepPID/ParticleName.cc: create Dyon names
+
+===============================
+30.09.09 Release HepPDT-3.04.00 
+===============================
+
+2009-09-30  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPID/ParticleIDMethods.cc: get correct R-hadron charge
+	* tests/HepPID/testParticleIDMethods.cc: expand R-hadron testing
+
+	* include/HepPDT/ParticleData.hh: add missing isPentaquark, isSUSY, and isRhadron
+	* src/HepPDT/ParticleID.cc: get correct R-hadron charge
+	* tests/HepPDT/testPID.cc: expand R-hadron testing
+	
+	* src/HepPID/ParticleName.cc, translatePythia.cc: 
+	  define more Kaluza-Klein states
+
+2009-09-18  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPDT/Makefile.am, VCMakefile.in: make dependence on libHepPID.so explicit
+
+2009-09-17  Lynn Garren <garren@fnal.gov>
+
+	* Find and fix two memory leaks
+	* include/HepPDT/ProcessUnknownID.hh: make destructor public
+	* include/HepPDT/ParticleDataTable.icc: cleanup ProcessUnknownID pointer
+	* src/HepPDT/ParticleDataTable.cc: cleanup ParticleData pointer
+	* src/HepPDT/ProcessUnknownID.cc, src/HepPDT/HeavyIonUnknownID.cc,
+	  tests/HepPDT/TestNuclearFragment.hh: improve code logic
+
+===============================
+22.01.09 Release HepPDT-3.03.02 
+===============================
+
+2009-01-22  Lynn Garren <garren@fnal.gov>
+
+	* replace configure.in with configure.ac
+	* configure.ac, */Makefile.am: use libtool
+	add VCMakefile.in for VisualC++ builds
+
+2009-01-09  Lynn Garren <garren@fnal.gov>
+
+	* replace pdt.table with evt.pdl from evtgenlhc 9.1
+	* get newer DECAY.DEC from evtgenlhc 9.1
+	* src/HepPID/translateEvtGen.cc: update translation
+	* src/HepPID/ParticleName.cc: list names for recognized 
+	EvtGen special particles
+	* tests/HepPDT/listEvtGenNames and testReadEvtGen now use
+	evt.pdl
+
+2009-01-06  Lynn Garren <garren@fnal.gov>
+
+	* data/particle.tbl: add eta_c(2S) using 2008 PDG data
+
+	* move EvtGen data files from data to examples/data.  
+	These files are unofficial and only used in the tests.
+
+2009-01-05  Lynn Garren <garren@fnal.gov>
+
+	* configure.in: trivial change to allow compilation with g++34
+
+===============================
+17.12.08 Release HepPDT-3.03.01 
+===============================
+
+2008-12-17  Lynn Garren <garren@fnal.gov>
+
+	* Makefile.am: remove unused docs and install-docs directives
+
+2008-12-12  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/SimpleProcessUnknownID.hh:
+	get rid of unused parameter names
+	
+	* include/HepPDT/TableBuilder.hh: cleanup function definitions
+	
+	* src/HepPDT/addEvtGenParticles.cc: cleanup internal function 
+	
+	* src/HepPDT/addHerwigParticles.cc, addPythiaParticles.cc, 
+	convertTemporaryMap.cc: get rid of unused parameter names
+	
+	To see warnings about unused parameters, configure with 
+	CXXFLAGS="-Wextra"  This compiler flag is not used by default.
+
+===============================
+24.10.08 Release HepPDT-3.03.00 
+===============================
+
+2008-10-24  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/TableBuilder.hh, src/HepPDT/addParticleTable.cc:
+	Allow addParticleTable() to optionally verfy the ParticleID.
+	bool  addParticleTable( std::istream&, TableBuilder&,
+	                        bool validate = false );
+	where: validate=true => verify that the ParticleID is valid
+
+	* data/particle.tbl: add comments about the validate option
+
+2008-10-20  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPID/ParticleIDMethods.cc: allow for Rhadrons and pentaquarks
+	in hasXXX, isMeson, isBaryon, and isHadron. isMeson and isBaryon 
+	return false if isRhadron or isPentaquark is true.
+
+	* tests/HepPID/testParticleIDMethods: check all methods in 
+	HepPID/ParticleIDMethods.hh
+
+2008-10-20  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPID/ParticleName.cc: add Kaluza-Klein excitation definitions
+
+2008-10-14  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/ParticleData.icc: fix a bug that filled the 
+	constituent list with incorrect data  The symptom of this bug was 
+	that the ParticleData hasXXX() methods returned incorrect information.
+	The ParticleID hasXXX() methods returned the proper information.
+	
+	* test/HepPDT/testHepPDT, testPID: test the hasXXX methods
+
+2008-10-14  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPID/ParticleName.cc, src/HepPID/translatePythia.cc:
+	Add a_tech, which was introduced in Pythia 6.414.
+
+	* src/HepPID/translatePDTtoGeant.cc: use abspid() instead of abs()
+
+	* examples/HepPDT/GNUmakefile.example.in: 
+	Use rpath so shared libraries will be found at run time.
+	* examples/*/*.cc: add cstdlib header for exit()
+	
+	* tests/HepPID/*.sh.in: improve scripts
+	* tests/HepPID/*.cc: add cstdlib header for exit()
+
+2008-10-13  Lynn Garren <garren@fnal.gov>
+	
+	* data/mass_width_2008 tables added
+
+===============================
+07.12.07 Release HepPDT-3.02.03 
+===============================
+
+2007-12-07  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPDT/addParticleTable.cc: neither translate name strings to 
+	  standard names nor check for valid PDG ID nubmers 
+	  (This was the only add method which had these features.)
+	* This is a temporary change to get CMS running.  Long term, 
+	  translations and checking will be switchable.
+
+	* data/particle.tbl: unique generator specific names
+
+===============================
+14.09.07 Release HepPDT-3.02.02 
+===============================
+
+2007-09-14  Lynn Garren <garren@fnal.gov>
+
+	* data/particle.tbl: set unknown widths to -1 for particles that decay
+          Modify ParticleData::isStable() accordingly.
+
+2007-09-12  Lynn Garren <garren@fnal.gov>
+
+	* include/ParticleDataTable.hh: add writeParticleStatus() for testing
+
+2007-09-11  Lynn Garren <garren@fnal.gov>
+
+	* data/particle.tbl: add missing width or lifetime data from 2006 PDG
+
+===============================
+07.09.07 Release HepPDT-3.02.01 
+===============================
+
+2007-09-07  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/ParticleData.hh: add isStable() method which
+	  checks to see if total width or lifetime are greater than zero
+
+	* include/HepPDT/ParticleDataTable.hh, src/HepPDT/ParticleDataTable.cc: 
+	  add unknown nuclear fragment to ParticleDataTable if created
+
+===============================
+04.09.07 Release HepPDT-3.02.00 
+===============================
+
+2007-08-31  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/ParticleDataTable.hh: remove redundant list of ParticleDatas
+
+2007-08-28  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/ProcessUnknownID.hh: processUnknownID() now passes 
+	  a const reference to this instance of the ParticleDataTable.
+	  This should allow many different use cases.
+
+
+2007-08-27  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPID/ParticleName.cc: unique generator specific names
+
+===============================
+22.08.07 Release HepPDT-3.01.00 
+===============================
+
+2007-08-22  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/ParticleDataTable.hh, ProcessUnknownID.hh,
+	  HeavyIonUnknownID.hh, SimpleProcessUnknownID.hh
+	  src/HepPDT/ParticleDataTable.cc, HeavyIonUnknownID.cc:
+	  Provide an abstract class and default implementations to deal
+	  with valid particle IDs that are not in the PDT.
+	  The default behaviour of ParticleDataTable remains unchanged.
+
+	* src/HepPDT/ParticleID.cc: return proper threeCharge for ions
+
+2007-08-21  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPID/ParticleName.hh, src/HepPID/ParticleName.cc:
+	  Allows both lookup of std::string from an int ID and the 
+	  reverse lookup of int ID from a std::string.
+	
+===============================
+16.08.07 Release HepPDT-3.00.00 
+===============================
+
+2007-08-16  Lynn Garren <garren@fnal.gov>
+
+	* MAJOR CHANGE:  Since HepPDT is not being used to deal with particle
+	  decay tables, all decay information has been removed.  This makes 
+	  for a much simpler implementation.
+
+
+==============================
+21.06.07 Release HepPDT-2.04.02
+==============================
+
+2007-06-21  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPID/ParticleName.cc: no blanks in name
+	* src/HepPDT/addParticleTable.cc: parse the latest version of the table
+
+	* data/particle.tbl: rearrange so that ID is the first entry
+	  table now has only id, name, charge, mass, and either width or lifetime
+
+2007-06-20  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPDT/addPDGParticles.cc,getPDGpid.cc: 
+	  found and fixed a bug in parsing the complete particle name
+
+2007-06-14  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPID/ParticleIDMethods.hh: free methods to get information
+	  from the particle ID - the same methods as in HepPDT::ParticleID
+	* test/HepPID/testParticleIDMethods.*: test ParticleIDMethods
+
+==============================
+22.05.07 Release HepPDT-2.04.01
+==============================
+
+2007-05-22  Lynn Garren <garren@fnal.gov>
+
+	* data/particle.tbl: rearrange so that name is the first entry
+	
+	* tests:  Put tests into HepPDT and HepPID subdirectories.
+	
+	* doc:  Put documents into HepPDT and HepPID subdirectories.
+
+==============================
+15.05.07 Release HepPDT-2.04.00
+==============================
+
+2007-05-15  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/ParticleDataTable.hh: sort table by absolute value of ID
+	* include/HepPDT/ParticleDataTableComparison.hh: use to sort PDT
+	* src/HepPID/translateEvtGen.cc: fix translation for internal particles
+
+
+2007-05-11  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/TableBuilder.hh: 
+	  define detail namespace for internal functions
+	* src/HepPDT/addParticleTable.cc: read particle.tbl
+
+
+2007-05-10  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPID/ParticleName.cc: define more particles
+	* src/HepPID/translateIsajet.cc: add tauL and tauR 
+	  (used internally by Isajet)
+	* src/HepPID/translatePythia.cc: add Pythia qq~ particles
+
+2007-05-08  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/ParticleID.hh: add isSUSY() and isRhadron()
+	* src/HepPDT/ParticleID.cc: add isSUSY() and isRhadron()
+	* src/HepPID/ParticleName.cc: add R-hadrons
+	* src/HepPID/translationHelpers.cc: isValid() now checks for R-hadrons
+
+2007-05-08  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/ParticleID.hh: get the number of Lambdas in an ion
+	* include/HepPID/ParticleIDTranslations.hh: get A and Z for ions
+	* src/HepPDT/ParticleID.cc: new ion numbering scheme (PDG 2006)
+	* src/HepPID/ParticleName.cc: new ion numbering scheme (PDG 2006)
+	  Using PDG 2006 numbers and names
+	* src/HepPID/translateEvtGen.cc: new ion numbering scheme (PDG 2006)
+	* src/HepPID/translateGeanttoPDT.cc: new ion numbering scheme (PDG 2006)
+	* src/HepPID/translatePDTtoGeant.cc: new ion numbering scheme (PDG 2006)
+	* src/HepPID/translatePythia.cc: new ion numbering scheme (PDG 2006)
+	* src/HepPID/translationHelpers.cc: new ion numbering scheme (PDG 2006)
+	* tests/testPID.cc: new ion numbering scheme (PDG 2006)
+
+2007-05-01  Lynn Garren <garren@fnal.gov>
+
+	* doc/doxygen.conf: create the doxygen reference manual
+
+2007-04-30  Lynn Garren <garren@fnal.gov>
+
+	* bootstrap, doc/buildDoc.sh, doc/Makefile.am: to avoid problems, 
+	  build documents when bootstrapping
+
+2007-03-27  Lynn Garren <garren@fnal.gov>
+
+	* Makefile.am,configure.in,doc/Makefile.am: build documents automatically if latex is present
+
+==============================
+28.02.07 Release HepPDT-2.03.00
+==============================
+2007-02-28  Lynn Garren <garren@fnal.gov>
+
+	* src/HepPID/translationHelpers.cc: improve validation checking
+	* examples:  add simple examples
+
+2007-02-26  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/TableBuilder.hh, src/HepPDT/addIsajetParticles.cc: 
+	  read isajet decay and mass info
+
+2006-10-02  Lynn Garren <garren@fnal.gov>
+
+	* include/HepPDT/CommonParticleData.hh: add methods to set mass and width
+	  include/HepPDT/ParticleData.hh: add methods to get resonance limits
+	  tests/testHepPDT.cc: test resonance limits
+
+==============================
+13.12.05 Release HepPDT-2.02.01
+==============================
+2005-12-13  Lynn Garren <garren@fnal.gov>
+
+	* HepPDT version 2.02.01
+	  HepPDT has been rewritten so that it does not attempt to call 
+	  decay methods directly and hence does not need templates.
+	  Particle ID translation methods have been moved to HepPID.
+	  Also, the code to read the QQ decay table has been cleaned up.
+
+2005-12-09  Lynn Garren <garren@fnal.gov>
+
+	* HepPID version 0.02.01
+	  ParticleIDTranslations.hh: add methods to write list of 
+	  known translations
+	  translateEvtGen.cc: update EvtGen translation
+          translateQQ.cc: use internal tables
+
+==============================
+21.11.05 Release CLHEP-1.9.2.2
+==============================
+2005-11-21  Lynn Garren <garren@fnal.gov>
+
+	* src/Makefile.am, test/Makefile.am: Build libraries for 
+	Windows Visual C++ without lib prefix.
+
+2005-11-17  Lynn Garren <garren@fnal.gov>
+
+	* configure.in: Remove check for sstream so Windows will not generate
+	spurious complaint.  Change code to always include <sstream>.
+	Remove HepPDT/StringStream.h.
+
+2005-11-04  Lynn Garren <garren@fnal.gov>
+
+	* addEvtGenParticles.cc: Bug fix
+
+2005-10-20  Lynn Garren <garren@fnal.gov>
+
+	* CommonParticleData.icc: Bug fix - low and high cutoffs for the width
+	were not being saved.
+	* Also write out cutoffs.
+
+2005-07-27  Lynn Garren <garren@fnal.gov>
+
+	* convertTemporaryMap.icc: Fill DecayData properly.
+	Also get proper particle names when parsing PDG table.
+ 
+==============================
+22.06.05 Release CLHEP-1.9.2.1
+==============================
+Wed Jun 22 2005  Andreas Pfeiffer  <andreas.pfeiffer@cern.ch>
+
+	* configure.in: changed soname to install_name for darwin targets,
+	dylibs still don't build properly on 10.3/10.4, static libs ok.
+
+2005-06-19  Lynn Garren <garren@fnal.gov>
+
+	* configure.in, Makefile.am: 
+	Use lib when building Visual C++ libraries.
+	Disable shared library build for Solaris CC.
+
+==============================
+22.04.05 Release CLHEP-1.9.2.0
+==============================
+2005-04-07  Lynn Garren <garren@fnal.gov>
+
+	* configure.in: set AR and ARFLAGS
+
+2005-03-17  Lynn Garren  <garren@fnal.gov>
+
+	* fix a bug in the PDG to PDT translations
+	
+	* use PDG 2004 numbering (only a few changes)
+
+	* ParticleID: The isNucleus() method will recognize a proton (2212) 
+	as a nuclear fragment.  Add isPentaquark() method.
+	
+	* The translation free functions are now in ParticleIDTranslations.hh
+	which is included in ParticleID.hh.  Pythia, Isajet, Herwig, and PDG
+	translation functions use static translation maps.
+
+	* examples are now installed 
+
+2005-02-18  Lynn Garren  <garren@fnal.gov>
+
+	* configure.in, Makefile.am: Stop using libtool.  
+	The newer releases of libtool seem to have dropped support for 
+	Windows Visual C++.  
+
+2005-02-14  Lynn Garren  <garren@fnal.gov>
+
+	* configure.in: Visual C++ flags are now "-EHsc -nologo -GR -GX -MD"
+
+2005-02-03  Lynn Garren  <garren@fnal.gov>
+
+	* configure.in: install step creates libCLHEP.a, libCLHEP.so,
+	and/or libCLHEP.dylib by adding a symbolic link.
+
+2005-02-03  Lynn Garren  <garren@fnal.gov>
+
+	* HepPDT: define HepPDT::QQDecayTable::writeTable,
+	HepPDT::QQChannel::write, and HepPDT::QQDecay::write
+
+2005-02-02  Andreas PFEIFFER  <andreas.pfeiffer@cern.ch>
+
+	* configure.in: modified compiler flags for windows:
+	added "-O -GR -GX -MD" as this is needed for the multi-thread
+	environments used.
+
+==============================
+29.11.04 Release CLHEP-1.9.1.2
+==============================
+==============================
+10.10.04 Release CLHEP-1.9.1.1
+==============================
+
+Fri Sep 24          2004 Lynn Garren <garren@fnal.gov>
+
+	* use AM_CXXFLAGS
+
+Tue Sep 14          2004 Lynn Garren <garren@fnal.gov>
+
+	* require autoconf 2.59, automake 1.9.1, and libtool 1.9b
+
+Tue Aug 31         2004 Lynn Garren <garren@fnal.gov>
+	
+	* change Solaris CC compile flags from "-O -mt" to "-O"
+	* libtools 1.9b or later is required for Solaris CC
+
+==============================
+30.06.04 Release CLHEP-1.9.1.0
+==============================
+    
+Wed Jun 23         2004 Lynn Garren <garren@fnal.gov>
+    
+	* HepPDT version is 1.01.00
+	* HepPDT: access ParticleData information by name (std::string)
+
+Wed May 19         2004 Lynn Garren <garren@fnal.gov>
+    
+	* HepPDT: fix bugs in translation
+	* HepPDT: add translation tests
+
+==============================
+11.05.04 Release CLHEP-1.9.0.2
+==============================
+    
+
+Wed Apr 21          2004 Lynn Garren <garren@fnal.gov>
+	
+	* fix Herwig and Isajet translation routines in HepPDT
+	  add translation checking tests
+
+==============================
+23.10.03 Release CLHEP-1.9.0.0
+==============================
+	
+Tue Jan 14 10:30:44 2003 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/TableBuilderT.hh:
+	* HepPDT/examples/examMyPDT.cc: use map.erase
+
+Wed Jul 24 16:15:31 2002 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/ParticleDataT.hh: explicitly include Constituent.hh
+	* HepPDT/examples/examDMF.cc: fix for KCC
+
+==============================
+01.06.02 Release CLHEP-1.8.0.0
+==============================
+
+Fri May 31 12:57:30 2002 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/Measurement.icc: inline better than static in this context
+
+Fri May 31 14:34:54 2002 Evgueni Tcherniaev <Evgueni.Tcherniaev@cern.ch>
+
+	* HepPDT/DMFactory.hh,DMFactory.icc:
+
+	Use MakerBase<Config> instead of typedefed MakerBase
+
+	* GenericFunctions/Makefile.in:
+	* StdHep/Makefile.in:
+
+	Added *.icc to the header file list: HEADERS = *.hh *.icc
+
+Tue May 28 17:46:34 2002 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/DMFactory.icc,ParticleDataTableT.icc: add typename
+	* HepPDT/ParticleDataTableT.icc: got one extra typename
+	
+	* HepMC/GenEventtoHEPEVT.cc,HEPEVTtoGenEvent.cc (Restored):
+	* StdHep/CollisionToStdTmp.cc,MultipleInteractionInfo.cc (Restored):
+	* StdHep/RunInfoToSTDCM.cc,StdEventToHEPEVT.cc (Restored):
+	* StdHep/getRunInfoFromSTDCM.cc,getStdEventfromHEPEVT.cc (Restored):
+
+	restore necessary files
+
+Fri May 24 17:07:39 2002 Evgueni Tcherniaev <Evgueni.Tcherniaev@cern.ch>
+
+	* configure.in:
+
+	Added cygwin
+	Disabled HepPDT, HepMC and StdHep on Windows
+
+
+Mon May 20 12:39:57 2002 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/test/testHepPDT.cc,testHepPDT.out.save (Removed):
+
+	test has been moved
+
+	* HepPDT/test/Makefile.in:
+
+	only testPID remains
+
+	* HepMC/ReadHepMC.h,WriteHepMC.h:
+	* HepMC/examples/GNUmakefile:
+
+	use iostream instead of istream or ostream
+
+	* StdHep/ConversionMethods.hh,ReadStdHep.hh,StdEvent.hh,WriteStdHep.hh:
+	* StdHep/print.cc,printVersion.cc,tree.cc:
+
+	use iostream instead of istream or ostream
+
+	* StdHep/ConversionMethods.hh,Makefile.in:
+	* StdHep/CollisionFromC.cc,CollisionToC.cc,StdEventC.h (Removed):
+	* StdHep/StdEventToC.cc,getStdEventFromC.cc (Removed):
+
+	to avoid confusion, remove StdEventC.h until it works properly
+	
+Mon May 20 19:13:18 2002 Evgueni Tcherniaev <Evgueni.Tcherniaev@cern.ch>
+
+	* StdHepC++ (Removed):
+
+	Obsolete StdHepC++ has been removed
+
+	* doxygen/config.doxygen,modules.doc:
+
+	StdHepC++ --> StdHep
+
+	* test/Makefile.in:
+	* test/testHepPDT.cc,testHepPDT.out.save (Added):
+
+	Added test for HepPDT
+
+	* configure.in: removed HepPDT/test/Makefile
+	
+=========================================
+25.04.02 revised StdHep uses HepMC
+=========================================
+
+
+Thu Apr 18 12:21:36 2002 Lynn Garren <garren@fnal.gov>
+
+	* HepMC/include/hepev4.h,hepev4.inc (Added): more information
+
+	* HepMC/Polarization.h:
+	* HepPDT/addPDGParticles.cc,digit.cc:
+
+	for consistency, get math.h from CLHEP.h
+
+	* HepPDT,HepPDT/test: replace HepStd and HepSTL with std
+
+	* HepMC/GenEvent.cc,GenEventtoHEPEVT.cc,GenParticle.cc,GenVertex.cc:
+
+	use stdio.h instead of cstdio - for DEC
+
+	* HepMC/HepMCConfig.h: fix forward declaration
+
+	* HepMC/examples/testMethods.cc: get rid of cmath
+	
+Wed Apr 17 13:33:45 2002 Lynn Garren <garren@fnal.gov>
+
+	* HepMC/FIhepevt.h,GenEvent.h,GenEventtoHEPEVT.cc,GenParticle.h:
+	* HepMC/HEPEVTtoGenEvent.cc,clean.cc:
+	* HepMC/particleMotherDaughter.cc (Added):
+
+	adding old StdHepC++ methods
+        deal with another common block
+
+	* HepMC/examples/initpydata.F: deal with another common block
+
+	* HepMC/Polarization.h:
+	* HepPDT/addPDGParticles.cc,digit.cc:
+
+	use math.h instead of cmath
+        cannot use std::sqrt or std::pow with math.h
+
+Mon Apr  1 14:22:12 2002 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/DDMFactory.hh:
+
+	Use std::map instead of MapVector.
+	MapVector does not compile on the non-standard egcs compiler.
+
+=========================================
+08.03.02 HepMC has become a part of CLHEP
+=========================================
+
+Fri Mar  8 09:55:09 2002 Lynn Garren <garren@fnal.gov>
+
+	* config/CLHEP-target.h.in,CLHEP.h:
+	* config/istream.h,ostream.h (Added):
+
+	Need to deal with base_ios (standard) versus ios (old).
+	
+        * HepPDT/ParticleDataTableT.icc,TableBuilderPythiaT.icc: 
+        * HepPDT/TableBuilderT.hh,TableBuilderT.icc:
+	* HepPDT/stringtodouble.cc,stringtodouble.hh (Added):
+
+	Get ready for HepMC.
+	
+	* HepPDT/test/testHepPDT.cc,testHepPDT.out.save:
+
+	Get ready for HepMC.
+
+	* HepPDT/examples/examMyPDT.out.save,examReadEvtGen.out.save:
+	* HepPDT/examples/examReadPDG.out.save,examReadPythia.out.save:
+	* HepPDT/examples/examReadQQ.out.save: 
+	
+	Get ready for HepMC.
+	
+Tue Mar  5 16:41:23 2002 Mark Fischler <mf@fnal.gov>
+
+	* GenericFunctions/IncompleteGamma.cc:
+	Fix something that fails to compile on some good compilers (gcc 3).
+	
+	
+Fri Feb  8 18:40:17 2002 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/DecayChannelT.hh,DecayChannelT.icc,DecayDataT.hh:
+	* HepPDT/DecayDataT.icc,DecayModelBase.hh,ParticleDataT.hh:
+	* HepPDT/ParticleDataTableT.hh,ParticleDataTableT.icc:
+	* HepPDT/addPDGParticles.cc:
+
+	Bug fixes.
+
+	* HepPDT/examples/examMyPDT.cc,examReadEvtGen.cc,examReadPDG.cc:
+	* HepPDT/examples/examReadPythia.cc,examReadQQ.cc:
+
+	Use DefaultConfig.hh.
+	
+Mon Jan 14 17:43:44 2002 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/DMFactory.icc,ParticleDataTableT.icc,convertTemporaryMap.icc:
+	Fix some definitions.
+	
+	
+Fri Nov 30 14:56:46 2001 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/DecayChannelT.icc,TableBuilderT.icc:
+	* HepPDT/translatePDGtabletoPDT.cc,translatePDTtoPDGtable.cc:
+	Fix array size problem.
+
+Tue Nov 27 16:48:13 2001 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/DMFactory.hh,DMFactory.icc,PDGtoQQTable.cc:
+	Get rid of g++ -pedantic warnings.
+	
+Fri Nov 23 15:10:35 2001 Evgueni Tcherniaev <Evgueni.Tcherniaev@cern.ch>
+
+	* compilers.txt (Added):
+	Added table of compiler dependent features.
+	
+Mon Nov 19 17:21:18 2001 Lynn Garren <garren@fnal.gov>
+
+	* configure.in:
+	* config/CLHEP-target.h.in:
+	* config/StringStream.h,sstream.h (Added):
+	
+	Check for sstream and set HEP_HAVE_SSTREAM.
+
+	* HepPDT/CommonParticleData.hh,CommonParticleData.icc,PDGtoQQTable.hh:
+	* HepPDT/ParticleDataT.hh,QQChannel.cc,QQChannel.hh,QQDecay.hh:
+	* HepPDT/QQDecayTable.hh,SimpleDecayModel.cc,TableBuilderT.icc:
+	* HepPDT/TempParticleData.cc,addEvtGenParticles.cc,addPDGParticles.cc:
+	* HepPDT/addPythiaParticles.cc,hasMethods.cc,readQQchannel.cc:
+	* HepPDT/readQQstream.cc,write.cc,writeTranslations.cc:
+	* HepPDT/HepStringStream.hh (Removed):
+
+	Use CLHEP/config/sstream.h
+	Minor cleanup of warning messages.
+
+Thu Nov 15 19:29:36 2001 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/DMFactory.icc,PDGtoQQTable.cc:
+	assert( _inst != 0 )  [should not be necessary]
+	
+Tue Nov 13 19:31:56 2001 Lynn Garren <garren@fnal.gov>
+
+	* HepPDT/CommonParticleData.hh,CommonParticleData.icc,Constituent.hh:
+	* HepPDT/DMFactory.hh,DMFactory.icc,DecayChannelT.hh,DecayChannelT.icc:
+	* HepPDT/DecayDataT.hh,DecayDataT.icc,DecayModelBase.hh,DefTable.cc:
+	* HepPDT/MapVector.hh,Measurement.icc,NullDecayModelT.hh:
+	* HepPDT/PDGtoQQTable.cc,PDGtoQQTable.hh,ParticleDataT.hh:
+	* HepPDT/ParticleDataT.icc,ParticleDataTableT.hh,ParticleID.hh:
+	* HepPDT/ParticleID.icc,QQChannel.cc,QQChannel.hh,QQDecay.cc:
+	* HepPDT/QQDecay.hh,QQDecayTable.cc,ResonanceStructure.cc:
+	* HepPDT/SimpleDecayModel.cc,SimpleDecayModel.hh,SpinState.icc:
+	* HepPDT/TableBuilderPythiaT.icc,TableBuilderT.icc:
+	* HepPDT/TableBuilderTEvtGen.icc,TableBuilderTQQ.icc:
+	* HepPDT/TempParticleData.cc,TempParticleData.hh,addEvtGenParticles.cc:
+	* HepPDT/addPDGParticles.cc,addPythiaParticles.cc,addQQParticles.cc:
+	* HepPDT/buildTable.cc,convertTemporaryMap.icc,readQQstream.cc:
+	* HepPDT/translateEvtGentoPDT.cc,translateGeanttoPDT.cc:
+	* HepPDT/translateHerwigtoPDT.cc,translateIsajettoPDT.cc:
+	* HepPDT/translatePDGtabletoPDT.cc,translatePDTtoEvtGen.cc:
+	* HepPDT/translatePDTtoGeant.cc,translatePDTtoHerwig.cc:
+	* HepPDT/translatePDTtoIsajet.cc,translatePDTtoPDGtable.cc:
+	* HepPDT/translatePDTtoPythia.cc,translatePythiatoPDT.cc,version.cc:
+	* HepPDT/write.cc,writeTranslations.cc: 
+	* HepPDT/test/testPID.cc:
+
+	Using assert.h, iomanip.h, HepStd, HepSTL.
+
+Fri Nov  9 14:37:30 2001 Lynn Garren <garren@fnal.gov>
+
+	* Makefile.in,configure.in:
+	Add HepPDT.
+	Add --diag_suppress nonstd_long_long for Linux KCC.
+
+	* HepPDT/HepStringStream.hh:
+	Do the right thing for gcc 3.x
+	This file needs to be merged with the CLHEP header.
+
+==========================================
+09.11.01 HepPDT has become a part of CLHEP
+==========================================
+
+Tue Nov  9 07:48:22 2001 Mark Fischler <mf@fnal.gov>
+
+	* HepPDT (Added):
+	* HepPDT/doc (Added):
+	* HepPDT/test (Added):
+	* HepPDT/data (Added):	
+	* HepPDT/examples (Added):
+	* HepPDT/examples/data (Added):
+
+	HepPDT added the repository.
+	
+==============================
+15.06.01 Release CLHEP-1.7.0.0
+==============================
+
+==========================================================================
+18.01.01 ZOOM PhysicsVectors Capabilities have become part of CLHEP/Vector
+==========================================================================
+	
+======================================================================
+24.10.00 Generic Functions by Joe Boudreau have become a part of CLHEP
+======================================================================
+==============================
+20.10.00 Release CLHEP-1.6.0.0
+==============================
+
+==============================================================================
+12.10.00 Expression Evaluator by Evgueni Tcherniaev has become a part of CLHEP
+         Alist, String and Combination have been disabled
+==============================================================================
+
+==============================
+08.05.00 Release CLHEP-1.5.0.0
+==============================
+
+============================================================
+24.04.00 StdHepC++ by Lynn Garren has become a part of CLHEP
+============================================================
+
+==============================
+20.04.99 Release CLHEP-1.4.0.0
+==============================
+
+=========================================================================
+16.12.98 Started: merging with BaBar version of CLHEP provided by G.Cosmo
+=========================================================================
+
+==========================
+28.07.98 Release CLHEP-1.3
+==========================
+
+	
+==========================
+05.02.98 Release CLHEP-1.2
+==========================
+
+========================================================
+08.12.97 Release CLHEP-1.1: Geant4 has migrated to CLHEP
+========================================================
+

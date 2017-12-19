@@ -1,0 +1,28 @@
+# Maintainer: Raphael Isemann <teemperor@gmail.com>
+pkgname=heppdt
+pkgver=3.04.01
+pkgrel=1
+pkgdesc="Collection of particle data table classes"
+arch=('i686' 'x86_64')
+url="http://lcgapp.cern.ch/project/simu/HepPDT/"
+license=('GPL')
+depends=()
+makedepends=(autoconf)
+source=("http://lcgapp.cern.ch/project/simu/HepPDT/download/HepPDT-$pkgver.tar.gz")
+md5sums=('SKIP')
+validpgpkeys=()
+
+prepare() {
+	cd "HepPDT-$pkgver"
+}
+
+build() {
+	cd "HepPDT-$pkgver"
+	./configure --prefix=/usr
+	make
+}
+
+package() {
+	cd "HepPDT-$pkgver"
+	make DESTDIR="$pkgdir/" install
+}

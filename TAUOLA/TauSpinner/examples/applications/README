@@ -1,0 +1,180 @@
+DISCLAIMER: 
+This directory includes code of actual applications
+of TauSpinner which are not supposed to serve as an example of 
+first program use. That is why instructions are 
+less detailed. Physics sense of the examples is explained 
+in paper IFJPAN-IV-2013-19 included in subdirectory
+applications-plots-and-paper.
+
+NOTE: Compiling these examples requires ROOT to be properly
+      configured and available through root-config
+      When using LCG scripts, a path to MC-TESTER must
+      be provided during configuration of Tauola++
+
+###########################################
+# Running applications-plots.exe          #
+###########################################
+
+Compile: make
+     or: make applications-plots.exe
+
+Run:     ./applications-plots.exe <config_file>
+
+List of assumptions made by this program:
+
+1) Subdirectory provided in config file already exists
+   (default directory name is 'applications-plots-and-paper')
+   All plots and .txt files will be stored in this subdirectory
+2) Input file contains W or Z events
+3) Particles in tau decays and W/Z decays are ordered
+   i.e. first daughter of W is tau,  second is nu_tau
+        first daughter of Z is tau-, second tau+
+
+   See "get_decay_channel" function for details
+   on the order of particles in tau decays
+
+Note:
+-----
+
+File 'events.dat' can be used to verify the program compiled and is running
+correctly. However, this sample file contains only 100 Z -> tau+ tau- -> pi+ pi-
+events. To test using this file run the program using default config file:
+
+./applications-plots.exe applications-plots.conf
+
+To produce the pdf file, this program needs to be run both on W and Z sample.
+It can be run on two samples separately or on one containing both types
+of events. It is assumed that output directory already has the .tex file
+and Makefile.
+
+Aside from running this program, the only thing that needs updating by the
+user is 'applications-plots-and-paper/input-file-info.txt' file.
+
+Afterwards, running 'make' in 'applications-plots-and-paper' subdirectory
+will produce 'tauspinner-application-studies.pdf' file.
+
+Histogram naming convention:
+----------------------------
+This section contains technical information for cases when a single histogram
+needs to be extracted from the rootfile. For this, we're presenting the
+naming convention used. Snippet of content listing from ROOT:
+
+  KEY: TH1D     h1_000;1        W- | mu, e
+  KEY: TH1D     h1_001;1        W+ | mu, e
+  KEY: TH1D     h1_010;1        W- | mu, e | unweighted
+  KEY: TH1D     h1_011;1        W+ | mu, e | unweighted
+  KEY: TH1D     h1_020;1        W- | mu, e | ratio
+  KEY: TH1D     h1_021;1        W+ | mu, e | ratio
+  ...
+  KEY: TH1D     h2_800_vis_mass;1       rho- vs rho+
+  KEY: TH2D     h2_801;1        rho- vs rho+ | unweighted
+  KEY: TH1D     h2_801_vis_mass;1       rho- vs rho+ | unweighted
+  KEY: TH2D     h2_802;1        rho- vs rho+ | ratio
+  KEY: TH1D     h2_802_vis_mass;1
+  KEY: TH1D     h2_800_px;1     rho- vs rho+
+  KEY: TH1D     h2_801_px;1     rho- vs rho+ | unweighted
+  KEY: TH1D     h2_800_px_ratio;1
+  KEY: TH1D     h2_800_py;1     rho- vs rho+
+  KEY: TH1D     h2_801_py;1     rho- vs rho+ | unweighted
+  KEY: TH1D     h2_800_py_ratio;1
+
+First two character determine category of the events:
+
+h1: W
+h2: Z
+h3: Z with higgs-like polarization
+
+Next three numbers are:
+
+For W decays:
+- first number is tau decay mode:
+    0 = mu, e
+    1 = pi
+    2 = rho
+- second number determines if it is original sample (0), sample after
+  TauSpinner processing (1) or ratio plot (2)
+- third number determines charge: 0 for W-, 1 for W+
+
+For Z and Z with higgs-like polarization:
+- first number is decay mode combination:
+    0 = mu-, e- vs mu+, e+
+    1 = mu-, e- vs pi+
+    2 = pi- vs mu+, e+
+    3 = pi- vs pi+
+    4 = mu-, e- vs rho+
+    5 = rho- vs mu+, e+
+    6 = pi- vs rho+
+    7 = rho- vs pi+
+    8 = rho- vs rho+
+- second number is always 0
+- third number determines if it is original sample (0), sample after
+  TauSpinner processing (1) or ratio plot (2)
+
+The suffixes correspond to:
+
+_vis_mass            - visible mass histograms
+_px                  - projection X of the 2D plots, i.e. charge- histograms
+_py                  - projection Y of the 2D plots, i.e. charge+ histograms
+_px_ratio, _py_ratio - ratio plots for charge+ and charge- histograms
+
+Following this convention, in order to reproduce, for example, the
+charge+ plot for Z -> pi- pi+, one needs to draw:
+
+h2_300_py       as red   line
+h2_301_py       as green line
+h2_300_py_ratio as black line
+
+As shown in the snippet above, histogram titles can also be used to help navigate
+between the histograms.
+
+####################################
+# Running hepmc-tauola-redecay.exe #
+####################################
+
+WARNING: THIS IS NOT EXAMPLE OF TAUSPINNER USE IT IS Tauola++ alone
+
+Compile: make hepmc-tauola-redecay.exe
+Run:     ./hepmc-tauola-redecay.exe <input_file> <output_file> [<max_events>]
+
+List of assumptions made by this program:
+
+1) Input file exists and is in HepMC::IO_GenEvent format generated from HepMC
+   version equal or lower than the current HepMC version used by Tauola++
+2) Input file contains tau decays
+
+Note:
+-----
+
+Program processes input sample, removes existing tau decays and adds new
+ones generated by Tauola++. Such redecayed sample is saved to new  HepMC file.
+
+For the convenience of our application:
+- program is configured to produce tau decays to e, mu, pi and rho only
+- taus are polarized
+- simple cuts are added: electron energy > 8GeV, muon energy > 12GeV,
+  pi or rho p_t > 20GeV and 15GeV respectively for larger and smaller p_t in
+  tau pair decay, if conditions are not fulfilled the decay generation 
+  is repeated.
+
+All of the above options can be switched on and off in the code. Cuts can be
+modified as needed.
+
+################################################
+# Running applications-comparison.exe          #
+################################################
+
+Compile: make applications-comparison.exe
+
+Run:     ./applications-comparison.exe <config_file_for_2_datafiles>
+
+This program works exactly as applications-plots except that for the weighted plots
+second datafile is used. This can be used for example to validate TauSpinner by using polarized
+sample for the first datafile and unpolarized sample for the second and setting Ipol=0 in config
+file.
+
+##################################################
+# Further validation tests are included          #
+# in directories: test-bornAFB and test-ipol     #
+##################################################
+--
+Last Modified: T. Przedzinski, 9.I.2014

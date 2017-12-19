@@ -1,0 +1,17 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f testReadEvtGen.out
+
+./testReadEvtGen@EXEEXT@
+
+if ( ! `sed 's/e-0\([0-9][0-9]\)/e-\1/g' testReadEvtGen.out | \
+  sed 's/e+0\([0-9][0-9]\)/e+\1/g'  | \
+  @DIFF_Q@ - @srcdir@/testReadEvtGen.output > /dev/null` )
+then
+  echo "testReadEvtGen.out and @srcdir@/testReadEvtGen.output differ"
+  exit 1;
+fi
+
+exit 0;
+

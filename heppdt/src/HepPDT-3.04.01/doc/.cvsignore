@@ -1,0 +1,10 @@
+Makefile.in
+*.ps
+*.pdf
+*.aux
+*.log
+*.dvi
+*.toc
+html
+latex
+doxygen.warnings

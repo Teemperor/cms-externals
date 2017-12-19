@@ -1,0 +1,753 @@
+#include <cassert>
+#include <climits>
+
+namespace fftjet {
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::KernelRecombinationAlg(
+        ScaleSpaceKernel* ikernel,
+        const Functor2<double,double,BgData>* bgWeight,
+        const double iunlikelyBgWeight,
+        const double idataCutoff,
+        const bool iwinnerTakesAll,
+        const bool ibuildCorrelationMatrix,
+        const bool ibuildClusterMask,
+        const unsigned ietaBinMin, const unsigned ietaBinMax)
+        : defaultKernel(ikernel),
+          bgWeightCalc(bgWeight),
+          unlikelyBgWeight(iunlikelyBgWeight),
+          dataCutoff(static_cast<Real>(idataCutoff)),
+          winnerTakesAll(iwinnerTakesAll),
+          buildCorrelationMatrix(ibuildCorrelationMatrix),
+          buildClusterMask(ibuildClusterMask),
+          etaBinMin(ietaBinMin),
+          etaBinMax0(ietaBinMax),
+
+          vMaker(),
+
+          weights(0),
+          kernelScales(0),
+          clusterScales(0),
+          clusterScaleRatios(0),
+          dEta(0),
+          energySum(0),
+          energyVariance(0),
+          weightSum(0),
+          etaEnergySum(0),
+          phiEnergySum(0),
+          etaPhiESum(0),
+          etaSum(0),
+          phiSum(0),
+          clusterMap(0),
+          peakPositions(0),
+          memFcns2d(0),
+          memFcns3d(0),
+          jets(0),
+          nWeights(0),
+
+          clusterMask(0),
+          maskMemSize(0),
+
+          dphiBuffer(0),
+          dphiBufSize(0),
+
+          use3d(true),
+
+          lastNJets(0),
+          lastNEta(0),
+          lastNPhi(0),
+          passedJets(0),
+          bgDim(1000)
+    {
+        assert(bgWeightCalc);
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::~KernelRecombinationAlg()
+    {
+        delete [] dphiBuffer;
+        delete [] clusterMask;
+
+        delete [] jets;
+        delete [] memFcns2d;
+        delete [] memFcns3d;
+        delete [] peakPositions;
+        delete [] clusterMap;
+        delete [] weights;
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    void KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::processKernelScales(
+        const std::vector<Peak>& peaks)
+    {
+        unsigned npass = 0;
+        use3d = true;
+        for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+        {
+            const Peak* peak = &peaks[ijet];
+            const double member(peak->membershipFactor());
+            assert(member >= 0.0);
+            if (member > 0.0)
+            {
+                peakPositions[npass] = peak;
+                kernelScales[npass] = member;
+
+                // Figure out the type of the cluster membership function.
+                // First, try to set up 3d handling.
+                AbsMembershipFunction* m3d = 
+                    dynamic_cast<AbsMembershipFunction*>(peak->membershipFunction());
+                if (m3d == 0)
+                    m3d = dynamic_cast<AbsMembershipFunction*>(defaultKernel);
+                if (m3d)
+                {
+                    memFcns3d[npass] = m3d;
+                    memFcns2d[npass] = 0;
+                }
+                else
+                {
+                    // Failed to set up 3d membership function. Try 2d.
+                    AbsKernel2d* m2d =
+                        dynamic_cast<AbsKernel2d*>(peak->membershipFunction());
+                    if (m2d == 0)
+                        m2d = dynamic_cast<AbsKernel2d*>(defaultKernel);
+                    if (m2d == 0)
+                    {
+                        // Failed to set up any membership function
+                        assert(!"Unspecified recombination membership function");
+                    }
+                    else
+                    {
+                        use3d = false;
+                        memFcns3d[npass] = 0;
+                        memFcns2d[npass] = m2d;
+                    }
+                }
+
+                // Figure out the recombination scale
+                double recoScale = peak->recoScale();
+                if (recoScale == 0.0)
+                    recoScale = peak->scale();
+                assert(recoScale > 0.0);
+                clusterScales[npass] = recoScale;
+                clusterScaleRatios[npass] = peak->recoScaleRatio();
+
+                ++npass;
+            }
+        }
+
+        // Verify the consistency of the membership function type.
+        // If "use3d" is still true, we know for sure that everything
+        // is 3d. However, if "use3d" is not true, there may be
+        // a mixture of 3d and 2d cases.
+        if (!use3d)
+            for (unsigned ijet=0; ijet<npass; ++ijet)
+                assert(memFcns2d[ijet]);
+
+        lastNJets = npass;
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    void KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::calculateDphi(
+        const Grid2d<Real>& eventData)
+    {
+        const unsigned bufsiz = lastNJets*lastNPhi;
+        if (bufsiz > dphiBufSize)
+        {
+            delete [] dphiBuffer;
+            dphiBuffer = new double[bufsiz];
+            dphiBufSize = bufsiz;
+        }
+
+        for (unsigned iphi=0; iphi<lastNPhi; ++iphi)
+        {
+            const Real phi(eventData.phiBinCenter(iphi));
+            double* dPhi = dphiBuffer + iphi*lastNJets;
+            for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+            {
+                double dphi = phi - peakPositions[ijet]->phi();
+                while (dphi > M_PI)
+                    dphi -= (2.0*M_PI);
+                while (dphi < -M_PI)
+                    dphi += (2.0*M_PI);
+                dPhi[ijet] = dphi;
+            }
+        }
+    }
+
+    template <typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    void KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::setupBuffers(
+        const unsigned njets, const unsigned nEta, const unsigned nPhi)
+    {
+        const bool setup4vec = recombine4Vectors();
+
+        if (njets > nWeights)
+        {
+            delete [] weights;
+            weights = new double[13*njets];
+            kernelScales = weights + njets;
+            clusterScales = kernelScales + njets;
+            clusterScaleRatios = clusterScales + njets;
+            dEta = clusterScaleRatios + njets;
+            energySum = dEta + njets;
+            energyVariance = energySum + njets;
+            weightSum = energyVariance + njets;
+            etaEnergySum = weightSum + njets;
+            phiEnergySum = etaEnergySum + njets;
+            etaPhiESum = phiEnergySum + njets;
+            etaSum = etaPhiESum + njets;
+            phiSum = etaSum + njets;
+
+            if (buildClusterMask)
+            {
+                delete [] clusterMap;
+                clusterMap = new unsigned[njets+1];
+            }
+
+            delete [] peakPositions;
+            peakPositions = new const Peak*[njets];
+
+            delete [] memFcns2d;
+            memFcns2d = new AbsKernel2d*[njets];
+
+            delete [] memFcns3d;
+            memFcns3d = new AbsMembershipFunction*[njets];
+
+            if (setup4vec)
+            {
+                delete [] jets;
+                jets = new VectorLike[njets];
+            }
+
+            nWeights = njets;
+        }
+
+        if (setup4vec)
+        {
+            const VectorLike zero = VectorLike();
+            for (unsigned i=0; i<njets; ++i)
+                jets[i] = zero;
+        }
+
+        for (unsigned i=0; i<njets; ++i)
+        {
+            energySum[i] = 0.0;
+            energyVariance[i] = 0.0;
+            weightSum[i] = 0.0;
+            etaEnergySum[i] = 0.0;
+            phiEnergySum[i] = 0.0;
+            etaPhiESum[i] = 0.0;
+            etaSum[i] = 0.0;
+            phiSum[i] = 0.0;
+        }
+
+        if (buildClusterMask)
+        {
+            const unsigned nbins = nEta*nPhi;
+            if (nbins > maskMemSize)
+            {
+                delete [] clusterMask;
+                clusterMask = new unsigned[nbins];
+                maskMemSize = nbins;
+            }
+            for (unsigned i=0; i<nbins; ++i)
+                clusterMask[i] = 0;
+        }
+
+        lastNJets = njets;
+        lastNEta = nEta;
+        lastNPhi = nPhi;
+        passedJets = 0;
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    void KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::allUnclustered(
+        const Grid2d<Real>& eventData,
+        VectorLike* unclustered, double* unused)
+    {
+        assert(lastNJets == 0);
+        const unsigned etaBinMax = etaBinMax0 < lastNEta ? 
+                                   etaBinMax0 : lastNEta;
+        for (unsigned ieta=etaBinMin; ieta<etaBinMax; ++ieta)
+        {
+            const Real eta(eventData.etaBinCenter(ieta));
+            for (unsigned iphi=0; iphi<lastNPhi; ++iphi)
+            {
+                const Real gridValue(eventData.uncheckedAt(ieta, iphi));
+                if (gridValue > dataCutoff)
+                {
+                    *unclustered += vMaker(
+                        gridValue, eta, eventData.phiBinCenter(iphi));
+                    *unused += gridValue;
+                }
+            }
+        }
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    inline const unsigned*
+    KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::getClusterMask() const
+    {
+        return clusterMask;
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    void KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::remapClusterMask()
+    {
+        if (buildClusterMask)
+        {
+            // Calculate the number of output jets and
+            // build the remapping array for the cluster mask
+            clusterMap[0] = 0;
+            for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+            {
+                if (weightSum[ijet] > 0.0 && energySum[ijet] > 0.0)
+                    clusterMap[ijet+1] = ++passedJets;
+                else
+                    clusterMap[ijet+1] = 0;
+            }
+
+            // Remap the cluster mask
+            const unsigned nbins = lastNEta*lastNPhi;
+            for (unsigned i=0; i<nbins; ++i)
+                clusterMask[i] = clusterMap[clusterMask[i]];
+        }
+        else
+        {
+            // Just calculate the number of output jets
+            for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+                if (weightSum[ijet] > 0.0 && energySum[ijet] > 0.0)
+                    ++passedJets;
+        }
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    bool KernelRecombinationAlg
+    <Real,VectorLike,BgData,VBuilder>::performPreliminaryProcessing(
+        const std::vector<Peak>& peaks,
+        const Grid2d<Real>& eventData,
+        const BgData* bgData, const unsigned nBgEta, const unsigned nBgPhi,
+        std::vector<RecombinedJet<VectorLike> >* outputJets,
+        VectorLike* unclustered, double* unused)
+    {
+        // Check the input
+        assert(bgData);
+        assert(outputJets);
+        assert(unclustered);
+        assert(unused);
+
+        bgDim = AbsRecombinationAlg<Real,VectorLike,BgData>::bgDimensionality(
+            eventData, nBgEta, nBgPhi);
+
+        // Reset the output
+        outputJets->clear();
+        *unclustered = VectorLike();
+        *unused = 0.0;
+
+        // Allocate and initialize some necessary buffers
+        setupBuffers(peaks.size(), eventData.nEta(), eventData.nPhi());
+
+        // Figure out the kernel scales from the scaler.
+        // Get rid of the peaks suppressed by the scaler.
+        processKernelScales(peaks);
+
+        if (lastNJets)
+        {
+            // Figure out the "dphi" values for each phi bin
+            // and for each jet. This must be done after calculating
+            // "peakPositions" and kernel bandwidth values.
+            calculateDphi(eventData);
+            return false;
+        }
+        else
+        {
+            // Just sum up the unclustered energy and return
+            // indicating that we are done in case there are no jets
+            allUnclustered(eventData, unclustered, unused);
+            return true;
+        }
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    void KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::buildOutput(
+        std::vector<RecombinedJet<VectorLike> >* outputJets,
+        const bool setRecoScaleRatiosToZero)
+    {
+        remapClusterMask();
+
+        const bool use4Vec = recombine4Vectors();
+        const bool useCentroid = useEtCentroid();
+
+        // Build the output jets        
+        outputJets->reserve(passedJets);
+        for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+            if (weightSum[ijet] > 0.0 && energySum[ijet] > 0.0)
+            {
+                const double et  = energySum[ijet];
+
+                const double centroidEta = etaSum[ijet]/et;
+                const double detaPeak = centroidEta - peakPositions[ijet]->eta();
+
+                const double dphiPeak = phiSum[ijet]/et;
+                const double centroidPhi = dphiPeak + peakPositions[ijet]->phi();
+
+                const double eSigma = energyVariance[ijet] > 0.0 ?
+                    sqrt(energyVariance[ijet]) : 0.0;
+
+                const double fuzziness = eSigma/et;
+
+                double etaWidth = etaEnergySum[ijet]/et - detaPeak*detaPeak;
+                etaWidth = etaWidth > 0.0 ? sqrt(etaWidth) : 0.0;
+
+                double phiWidth = phiEnergySum[ijet]/et - dphiPeak*dphiPeak;
+                phiWidth = phiWidth > 0.0 ? sqrt(phiWidth) : 0.0;
+
+                double rho = 0.0;
+                if (etaWidth > 0.0 && phiWidth > 0.0)
+                {
+                    double comboWidth = etaPhiESum[ijet]/et - detaPeak*dphiPeak;
+                    rho = comboWidth/etaWidth/phiWidth;
+                    if (rho > 1.0)
+                        rho = 1.0;
+                    if (rho < -1.0)
+                        rho = -1.0;
+                }
+
+                Peak inPeak(*peakPositions[ijet]);
+                inPeak.setRecoScale(clusterScales[ijet]);
+                if (setRecoScaleRatiosToZero)
+                    inPeak.setRecoScaleRatio(0.0);
+
+                if (use4Vec)
+                {
+                    outputJets->push_back(RecombinedJet<VectorLike>(
+                        inPeak, jets[ijet],
+                        weightSum[ijet], et, centroidEta, centroidPhi,
+                        etaWidth, phiWidth, rho, fuzziness));
+                }
+                else if (useCentroid)
+                {
+                    outputJets->push_back(RecombinedJet<VectorLike>(
+                        inPeak, vMaker(et, centroidEta, centroidPhi),
+                        weightSum[ijet], et, centroidEta, centroidPhi,
+                        etaWidth, phiWidth, rho, fuzziness));
+                }
+                else
+                {
+                    outputJets->push_back(RecombinedJet<VectorLike>(
+                        inPeak, vMaker(et, inPeak.eta(), inPeak.phi()),
+                        weightSum[ijet], et, centroidEta, centroidPhi,
+                        etaWidth, phiWidth, rho, fuzziness));
+                }
+            }
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    int KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::run(
+        const std::vector<Peak>& peaks,
+        const Grid2d<Real>& eventData,
+        const BgData* bgData, const unsigned nBgEta, const unsigned nBgPhi,
+        std::vector<RecombinedJet<VectorLike> >* outputJets,
+        VectorLike* unclustered, double* unused)
+    {
+        if (performPreliminaryProcessing(
+                peaks, eventData, bgData, nBgEta, nBgPhi,
+                outputJets, unclustered, unused))
+            return 0;
+
+        // Some variables which will be needed below
+        const unsigned etaBinMax = etaBinMax0 < lastNEta ? 
+                                   etaBinMax0 : lastNEta;
+        const unsigned bgStride = bgDim == 2 ? 1 : 0;
+        const bool use4Vec = recombine4Vectors();
+
+        // Go over all grid points and figure out to which jet
+        // that point belongs.
+        for (unsigned ieta=etaBinMin; ieta<etaBinMax; ++ieta)
+        {
+            const Real eta(eventData.etaBinCenter(ieta));
+
+            // Figure out dEta for each jet
+            for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+                dEta[ijet] = eta - peakPositions[ijet]->eta();
+
+            // We will try to get rid of each point in the inner
+            // cycle as fast as possible. The following few lines
+            // of code depend, unfortunately, on the internal layout
+            // of the Grid2d object. On the positive side, we can
+            // get rid of a point below the cutoff without making
+            // the "uncheckedAt(ieta, iphi)" function call.
+            const Real* databuf = eventData.data() + ieta*lastNPhi;
+
+            const BgData* bgbuf;
+            switch (bgDim)
+            {
+            case 0:
+                bgbuf = bgData;
+                break;
+            case 1:
+                bgbuf = bgData + ieta;
+                break;
+            case 2:
+                bgbuf = bgData + ieta*lastNPhi;
+                break;
+            default:
+                assert(0);
+            }
+
+            for (unsigned iphi=0; iphi<lastNPhi; ++iphi)
+            {
+                if (databuf[iphi] <= dataCutoff)
+                    continue;
+
+                const Real gridValue(databuf[iphi]);
+                const Real phi(eventData.phiBinCenter(iphi));
+                const double* dPhi = dphiBuffer + iphi*lastNJets;
+                const double bgW((*bgWeightCalc)(static_cast<double>(gridValue),
+                                                 bgbuf[iphi*bgStride]));
+                const VectorLike gridVec(vMaker(gridValue, eta, phi));
+
+                // Cycle over jets. This is the most speed-critical
+                // cycle in the whole algorithm.
+                double sum(0.0), maxW(0.0);
+                unsigned maxWJet(lastNJets);
+                if (use3d)
+                {
+                    for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+                    {
+                        if (clusterScaleRatios[ijet] > 0.0)
+                            memFcns3d[ijet]->setScaleRatio(
+                                clusterScaleRatios[ijet]);
+                        const double f = kernelScales[ijet]*
+                            (*memFcns3d[ijet])(dEta[ijet], dPhi[ijet],
+                                               gridValue, clusterScales[ijet]);
+                        sum += f;
+                        weights[ijet] = f;
+                        if (f > maxW)
+                        {
+                            maxW = f;
+                            maxWJet = ijet;
+                        }
+                    }
+                }
+                else
+                {
+                    for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+                    {
+                        if (clusterScaleRatios[ijet] > 0.0)
+                            memFcns2d[ijet]->setScaleRatio(
+                                clusterScaleRatios[ijet]);
+                        const double f = kernelScales[ijet]*
+                            (*memFcns2d[ijet])(dEta[ijet], dPhi[ijet],
+                                               clusterScales[ijet]);
+                        sum += f;
+                        weights[ijet] = f;
+                        if (f > maxW)
+                        {
+                            maxW = f;
+                            maxWJet = ijet;
+                        }
+                    }
+                }
+
+                if (maxWJet == lastNJets)
+                {
+                    // No contributing cluster
+                    const bool poorModelfit = bgW < unlikelyBgWeight;
+
+                    // We should attempt to rectify the situation when
+                    // the model used in this recombination algorithm
+                    // breaks down. There are several breakdown modes:
+                    //
+                    //  1) The initial guess for the jet Pt was too low,
+                    //     and the cell's energy exceeds the allowed energy
+                    //     range for this jet and for the delta phi and
+                    //     delta eta between the cell and the jet.
+                    //
+                    //  2) More than one jet contributes energy to the
+                    //     current cell, so that, again, the cell's energy
+                    //     exceeds the allowed energy range for each of
+                    //     these jets.
+                    //
+                    //  3) The pattern recognition stage did not find
+                    //     all the jets (or the user tries to fit a certain
+                    //     topology to every event). Then the cell's energy
+                    //     may have been generated by a jet not taken
+                    //     into account in the recombination.
+                    //
+                    // Cases 1) and 2) are treated in the code below
+                    // by splitting the cell's energy between the closest
+                    // two jets (rather than one) and the background.
+                    // Ideally, one should choose the split in such a way
+                    // that the energy assignment probability is maximized.
+                    // Unfortunately, such an approach would be extremely
+                    // CPU-intensive. Instead, we will simply allow the jets
+                    // to take as much energy as they can from this cell.
+                    // 
+                    // Case 3) can not be handled here -- it is up to the
+                    // user to choose the background membership function
+                    // and the "unlikelyBgWeight" parameter in such a way
+                    // that the overall algorithm is sufficiently robust
+                    // w.r.t. this breakdown mode.
+                    //
+                    // When 2d kernels are used, energy splitting between
+                    // nearby jets becomes unnatural -- there is no reason
+                    // for the cell to have low membership function value
+                    // apart from being too far away from the jet center
+                    // in the first place. Therefore, such cells are
+                    // assigned to the background/noise anyway.
+                    //
+                    if (poorModelfit && use3d)
+                    {
+                        double maxE[2] = {0.0, 0.0};
+                        unsigned maxEJet[2] = {UINT_MAX, UINT_MAX};
+
+                        for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+                        {
+                            if (clusterScaleRatios[ijet] > 0.0)
+                                memFcns3d[ijet]->setScaleRatio(
+                                    clusterScaleRatios[ijet]);
+                            const double e = memFcns3d[ijet]->absorbableEnergy(
+                                dEta[ijet], dPhi[ijet], clusterScales[ijet]);
+                            if (e > maxE[0])
+                            {
+                                maxE[1] = maxE[0];
+                                maxEJet[1] = maxEJet[0];
+                                maxE[0] = e;
+                                maxEJet[0] = ijet;
+                            }
+                            else if (e > maxE[1])
+                            {
+                                maxE[1] = e;
+                                maxEJet[1] = ijet;
+                            }
+                        }
+
+                        double cellE = gridValue;
+                        for (unsigned i=0; i < 2 && cellE > 0.0; ++i)
+                            if (maxE[i] > 0.0)
+                            {
+                                const unsigned ijet = maxEJet[i];
+                                const double absorbedE = cellE > maxE[i] ?
+                                    maxE[i] : cellE;
+                                cellE -= absorbedE;
+
+                                if (use4Vec)
+                                    jets[ijet] += vMaker(absorbedE, eta, phi);
+                                weightSum[ijet] += 1.0;
+                                energySum[ijet] += absorbedE;
+                                etaSum[ijet] += absorbedE*eta;
+                                etaEnergySum[ijet] += 
+                                    absorbedE*dEta[ijet]*dEta[ijet];
+                                phiEnergySum[ijet] += 
+                                    absorbedE*dPhi[ijet]*dPhi[ijet];
+                                etaPhiESum[ijet] += 
+                                    absorbedE*dEta[ijet]*dPhi[ijet];
+                                phiSum[ijet] += absorbedE*dPhi[ijet];
+                                //
+                                // How does this affect the energy variance?
+                                // No easy way to make a meaningful estimate.
+                                //
+                                energyVariance[ijet] += 0.0;
+                            }
+
+                        if (cellE > 0.0)
+                        {
+                            // There is still some energy left to
+                            // assign it to the noise/background
+                            if (maxE[0] > 0.0)
+                                // Some energy was assigned to jets
+                                *unclustered += vMaker(cellE, eta, phi);
+                            else
+                                // No energy was assigned to jets.
+                                // No need to recalculate the 4-vector.
+                                *unclustered += gridVec;
+                            *unused += cellE;
+                        }
+                    }
+                    else
+                    {
+                        // Just assign the whole cell to the unclustered
+                        // energy
+                        *unclustered += gridVec;
+                        *unused += gridValue;
+                    }
+                }
+                else 
+                {
+                    const double totalSum = sum + bgW;
+
+                    if (buildClusterMask && maxW > bgW)
+                        clusterMask[ieta*lastNPhi + iphi] = maxWJet + 1;
+
+                    if (winnerTakesAll)
+                    {
+                        // Hard clustering. All energy goes
+                        // to the cluster with the highest weight.
+                        if (maxW > bgW)
+                        {
+                            if (use4Vec)
+                                jets[maxWJet] += gridVec;
+                            weightSum[maxWJet] += 1.0;
+                            energySum[maxWJet] += gridValue;
+                            etaSum[maxWJet] += gridValue*eta;
+                            etaEnergySum[maxWJet] += 
+                                gridValue*dEta[maxWJet]*dEta[maxWJet];
+                            phiEnergySum[maxWJet] += 
+                                gridValue*dPhi[maxWJet]*dPhi[maxWJet];
+                            etaPhiESum[maxWJet] += 
+                                gridValue*dEta[maxWJet]*dPhi[maxWJet];
+                            energyVariance[maxWJet] +=
+                                gridValue*gridValue*(1.0 - maxW/totalSum);
+                            phiSum[maxWJet] += gridValue*dPhi[maxWJet];
+                        }
+                        else
+                        {
+                            *unclustered += gridVec;
+                            *unused += gridValue;
+                        }
+                    }
+                    else
+                    {
+                        // Fuzzy clustering. Distribute the cell energy
+                        // among all clusters according to their weights.
+
+                        // Unclustered energy fraction
+                        const double bgfrac = bgW/totalSum;
+                        if (bgfrac > 0.0)
+                        {
+                            *unclustered += gridVec*bgfrac;
+                            *unused += gridValue*bgfrac;
+                        }
+
+                        // Fractions which belong to each jet
+                        for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+                        {
+                            const double w = weights[ijet]/totalSum;
+                            if (w > 0.0)
+                            {
+                                const double ePart = gridValue*w;
+                                if (use4Vec)
+                                    jets[ijet] += gridVec*w;
+                                weightSum[ijet] += w;
+                                energySum[ijet] += ePart;
+                                etaEnergySum[ijet] += 
+                                    ePart*dEta[ijet]*dEta[ijet];
+                                etaSum[ijet] += ePart*eta;
+                                phiEnergySum[ijet] +=
+                                    ePart*dPhi[ijet]*dPhi[ijet];
+                                etaPhiESum[ijet] +=
+                                    ePart*dEta[ijet]*dPhi[ijet];
+                                energyVariance[ijet] += 
+                                    gridValue*ePart*(1.0 - w);
+                                phiSum[ijet] += ePart*dPhi[ijet];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        buildOutput(outputJets, false);
+
+        return 0;
+    }
+}

@@ -1,0 +1,281 @@
+#include <cassert>
+#include <algorithm>
+
+namespace fftjet {
+    template<typename Real, typename Complex>
+    AbsKernelConvolver<Real, Complex>::AbsKernelConvolver(
+        const AbsFFTEngine<Real,Complex>* ifftEngine,
+        const unsigned iminFixBin, const unsigned imaxFixBin)
+        : fftEngine(ifftEngine),
+          minFixBin(iminFixBin),
+          maxFixBin(imaxFixBin),
+          fixEfficiency(iminFixBin || imaxFixBin),
+          complexBuffer(0),
+          dataImage(0),
+          dataBuffer(0),
+          effBuf(0)
+    {
+        assert(fftEngine);
+        if (fixEfficiency)
+        {
+            assert(minFixBin < maxFixBin);
+            assert(maxFixBin <= fftEngine->nEta());
+        }
+    }
+
+    template<typename Real, typename Complex>
+    AbsKernelConvolver<Real, Complex>::~AbsKernelConvolver()
+    {
+        delete [] dataBuffer;
+        delete [] effBuf;
+        for (typename std::map<double,KernelData<Real,Complex> >::iterator it =
+                 kernelProperties.begin(); it != kernelProperties.end(); ++it)
+        {
+            delete [] const_cast<Real*>(it->second.scan());
+            fftEngine->destroyComplex(const_cast<Complex*>(it->second.image()));
+            delete [] const_cast<Real*>(it->second.normalization());
+        }
+        fftEngine->destroyComplex(dataImage);
+        fftEngine->destroyComplex(complexBuffer);
+    }
+
+    template<typename Real, typename Complex>
+    inline bool AbsKernelConvolver<Real, Complex>::isScaleProcessed(
+        const double scale) const
+    {
+        return !(kernelProperties.find(scale) == kernelProperties.end());
+    }
+
+    template<typename Real, typename Complex>
+    void AbsKernelConvolver<Real, Complex>::processScale(const double scale)
+    {
+        if (kernelProperties.find(scale) == kernelProperties.end())
+        {
+            if (complexBuffer == 0)
+            {
+                complexBuffer = fftEngine->allocateComplex();
+                assert(complexBuffer);
+            }
+            KernelData<Real,Complex> kerInfo(buildKernelImage(scale));
+            if (fixEfficiency)
+                assert(kerInfo.normalization());
+            kernelProperties.insert(std::make_pair(scale, kerInfo));
+        }
+    }
+
+    template<typename Real, typename Complex>
+    void AbsKernelConvolver<Real, Complex>::setEventData(
+        const Real* data, const unsigned nEta, const unsigned nPhi)
+    {
+        assert(nEta == fftEngine->nEta());
+        assert(nPhi == fftEngine->nPhi());
+
+        if (fixEfficiency)
+        {
+            // Copy the data into an internal buffer
+            const unsigned nbins = nEta*nPhi;
+            if (dataBuffer == 0)
+                dataBuffer = new Real[nbins];
+            Real* tmp = const_cast<Real*>(dataBuffer);
+            for (unsigned i=0; i<nbins; ++i)
+                tmp[i] = data[i];
+        }
+        else
+        {
+            if (dataImage == 0)
+            {
+                dataImage = fftEngine->allocateComplex();
+                assert(dataImage);
+            }
+            fftEngine->transformForward(data, dataImage);
+        }
+    }
+
+    template<typename Real, typename Complex>
+    Real* AbsKernelConvolver<Real, Complex>::buildEffNorm(
+        const Real* scan) const
+    {
+        const unsigned nEta = fftEngine->nEta();
+        const unsigned nPhi = fftEngine->nPhi();
+
+        if (effBuf == 0)
+            effBuf = new Real[nEta];
+
+        // For each eta bin, sum up all phi bins
+        for (unsigned ieta=0; ieta<nEta; ++ieta)
+        {
+            long double sum = 0.0L;
+            const Real* s = scan + ieta*nPhi;
+            for (unsigned iphi=0; iphi<nPhi; ++iphi)
+                sum += s[iphi];
+            effBuf[ieta] = sum;
+        }
+
+        // Allocate the memory for the normalization curve.
+        // The corresponding "delete" will be done in the destructor.
+        Real* norm = new Real[nEta];
+        for (unsigned ieta=0; ieta<nEta; ++ieta)
+            norm[ieta] = 0;
+
+        // Shift the kernel center to each bin between minFixBin
+        // and maxFixBin. Sum the shifted kernel values falling
+        // between minFixBin and maxFixBin. This summing is a little
+        // bit tricky because the kernel wraps around (the boundary
+        // in eta is also periodic).
+        for (unsigned ishift=minFixBin; ishift<maxFixBin; ++ishift)
+        {
+            long double sum = 0.0L;
+            for (unsigned ieta=0; ieta<nEta; ++ieta)
+            {
+                const unsigned idx = (ishift + ieta) % nEta;
+                if (idx >= minFixBin && idx < maxFixBin)
+                    sum += effBuf[ieta];
+            }
+            assert(sum > 0.0L);
+            norm[ishift] = 1.0L/sum;
+        }
+
+        return norm;
+    }
+
+    template<typename Real, typename Complex>
+    void AbsKernelConvolver<Real, Complex>::convolveWithKernel(
+        const double scale, Real* result,
+        const unsigned nEta, const unsigned nPhi)
+    {
+        assert(nEta == fftEngine->nEta());
+        assert(nPhi == fftEngine->nPhi());
+
+        // Check that the "setEventData" function was called
+        // at least once prior to this
+        assert(dataBuffer || dataImage);
+
+        // Allocate the complex buffer which might be used
+        // by the kernel image builder
+        if (complexBuffer == 0)
+        {
+            complexBuffer = fftEngine->allocateComplex();
+            assert(complexBuffer);
+        }
+
+        // Find or build the kernel image appropriate for this scale
+        typename std::map<double,KernelData<Real,Complex> >::iterator it = 
+            kernelProperties.find(scale);
+        const bool scaleProcessed = !(it == kernelProperties.end());
+        KernelData<Real,Complex> kerInfo(scaleProcessed ? it->second :
+                                         buildKernelImage(scale));
+        if (!scaleProcessed)
+        {
+            if (fixEfficiency)
+                assert(kerInfo.normalization());
+            kernelProperties.insert(std::make_pair(scale, kerInfo));
+        }
+
+        if (fixEfficiency)
+        {
+            // Apply the efficiency normalization curve
+            // appropriate for this scale to the data and
+            // build the data image
+            const Real *normdata = kerInfo.normalization();
+            for (unsigned ieta=0; ieta<nEta; ++ieta)
+            {
+                const Real norm = normdata[ieta];
+                const Real* dbuf = dataBuffer + ieta*nPhi;
+                Real* res = result + ieta*nPhi;
+                for (unsigned iphi=0; iphi<nPhi; ++iphi)
+                    res[iphi] = norm*dbuf[iphi];
+            }
+
+            if (dataImage == 0)
+            {
+                dataImage = fftEngine->allocateComplex();
+                assert(dataImage);
+            }
+            fftEngine->transformForward(result, dataImage);
+        }
+
+        // Multiply Fourier images and transform back the result
+        fftEngine->multiplyTransforms(dataImage, kerInfo.image(),
+                                      complexBuffer);
+        fftEngine->transformBack(complexBuffer, result);
+    }
+
+    template<typename Real, typename Complex>
+    inline unsigned AbsKernelConvolver<Real, Complex>::nProcessedScales() const
+    {
+        return kernelProperties.size();
+    }
+
+    template<typename Real, typename Complex>
+    void AbsKernelConvolver<Real, Complex>::getProcessedScales(
+        std::vector<double>* scales) const
+    {
+        assert(scales);
+        scales->clear();
+        scales->reserve(kernelProperties.size());
+        for (typename std::map<double,KernelData<Real,Complex> >::const_iterator it =
+                 kernelProperties.begin(); it != kernelProperties.end(); ++it)
+            scales->push_back(it->first);
+        std::sort(scales->begin(), scales->end(), std::greater<double>());
+    }
+
+    template<typename Real, typename Complex>
+    const KernelData<Real,Complex>* 
+    AbsKernelConvolver<Real, Complex>::getKernelData(const double scale) const
+    {
+        typename std::map<double,KernelData<Real,Complex> >::const_iterator it = 
+            kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return &it->second;
+        else
+            return 0;
+    }
+
+    template<typename Real, typename Complex>
+    const Real* AbsKernelConvolver<Real, Complex>::getKernelScan(
+        const double scale) const
+    {
+        typename std::map<double,KernelData<Real,Complex> >::const_iterator it = 
+            kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.scan();
+        else
+            return 0;
+    }
+
+    template<typename Real, typename Complex>
+    const Complex* AbsKernelConvolver<Real, Complex>::getKernelImage(
+        const double scale) const
+    {
+        typename std::map<double,KernelData<Real,Complex> >::const_iterator it = 
+            kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.image();
+        else
+            return 0;
+    }
+
+    template<typename Real, typename Complex>
+    const Real* AbsKernelConvolver<Real, Complex>::getNormalization(
+        const double scale) const
+    {
+        typename std::map<double, KernelData<Real,Complex> >::const_iterator it = 
+            kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.normalization();
+        else
+            return 0;
+    }
+
+    template<typename Real, typename Complex>
+    double AbsKernelConvolver<Real, Complex>::getScanArea(
+        const double scale) const
+    {
+        typename std::map<double, KernelData<Real,Complex> >::const_iterator it = 
+            kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.fftScanArea();
+        else
+            return 0.0;
+    }
+}

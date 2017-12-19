@@ -1,0 +1,571 @@
+#include <algorithm>
+#include <cassert>
+#include <cfloat>
+
+namespace fftjet {
+    template<class Cluster, typename LevelInfo>
+    ProximityClusteringTree<Cluster,LevelInfo>::TreeNode::TreeNode(
+        const TreeNodeId& iid, const Cluster& ijet)
+        : jet(ijet), id(iid), parent(0), distanceToParent(DBL_MAX), radius(0.0)
+    {
+        // Typically, there will be one daughter
+        // daus.reserve(1);
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline void ProximityClusteringTree<Cluster,LevelInfo>::
+    TreeNode::addDaughter(TreeNodePtr dau)
+    {
+        const unsigned nDaus = daus.size();
+        if (nDaus)
+        {
+            // Keep the daughters sorted. We expect that,
+            // on average, the number of daus will be small.
+            const TreeNodePtr* pdau = &daus[0];
+            unsigned i = 0;
+            for (; i<nDaus; ++i)
+                if (pdau[i]->distanceToParent > dau->distanceToParent)
+                    break;
+            daus.insert(i, dau);
+        }
+        else
+            daus.push_back(dau);
+    }
+
+    template<class Cluster, typename LevelInfo>
+    double ProximityClusteringTree<Cluster,LevelInfo>::
+    TreeNode::largestToNode(const ProximityClusteringTree& tree,
+                            const TreeNode* other) const
+    {
+        double thisD;
+        if (other == parent)
+            thisD = distanceToParent;
+        else
+            thisD = tree.uncheckedClusterDistance(id, other->id);
+        double maxD = thisD;
+        const int ndaus = daus.size();
+        if (ndaus)
+        {
+            for (int idau=ndaus-1; idau>=0; --idau)
+                if (daus[idau]->distanceToParent + 
+                    daus[idau]->radius + thisD > maxD)
+                {
+                    const double d = daus[idau]->largestToNode(tree, other);
+                    if (d > maxD)
+                        maxD = d;
+                }
+        }
+        return maxD;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ProximityClusteringTree<Cluster,LevelInfo>::TreeNode::updateRadius(
+        const ProximityClusteringTree& tree)
+    {
+        radius = 0.0;
+        const int ndaus = daus.size();
+        if (ndaus)
+        {
+            for (int idau=0; idau<ndaus; ++idau)
+                daus[idau]->updateRadius(tree);
+
+            for (int idau=ndaus-1; idau>=0; --idau)
+                if (daus[idau]->distanceToParent + daus[idau]->radius > radius)
+                {
+                    const double d = daus[idau]->largestToNode(tree, this);
+                    if (d > radius)
+                        radius = d;
+                }
+        }
+    }
+
+    template<class Cluster, typename LevelInfo>
+    ProximityClusteringTree<Cluster,LevelInfo>::TreeLevel::TreeLevel(
+        const double iscale, const LevelInfo& u, const unsigned n)
+        : scale(iscale),
+          unclustered(u)
+    {
+        assert(scale > 0.0);
+        if (n)
+            nodes.reserve(n);
+    }
+
+    template<class Cluster, typename LevelInfo>
+    ProximityClusteringTree<Cluster,LevelInfo>::TreeLevel::TreeLevel(
+        const ProximityClusteringTree<Cluster,LevelInfo>::TreeLevel& r)
+        : scale(r.scale),
+          unclustered(r.unclustered),
+          nodes(r.nodes)
+    {
+    }
+
+    template<class Cluster, typename LevelInfo>
+    ProximityClusteringTree<Cluster,LevelInfo>::ProximityClusteringTree(
+        const AbsDistanceCalculator<Cluster>* calc, bool itreeOwnsCalc)
+        : AbsClusteringTree<Cluster,LevelInfo>(),
+          distance(calc),
+          treeOwnsCalc(itreeOwnsCalc),
+          recalculateRadii(false)
+    {
+        // Create the root node
+        Cluster dummyCluster(Cluster::dummy());
+        TreeNode topnode(TreeNodeId(0,0), dummyCluster);
+
+        // Create the top level
+        LevelInfo dummyInfo = LevelInfo();
+        TreeLevel *topLevel = new TreeLevel(DBL_MAX, dummyInfo, 1);
+        topLevel->nodes.push_back(topnode);
+        levels.push_back(topLevel);
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline typename ProximityClusteringTree<Cluster,LevelInfo>::TreeNode* 
+    ProximityClusteringTree<Cluster,LevelInfo>::getNodeById(
+        const TreeNodeId& id) const
+    {
+        return &levels.at(id.first)->nodes.at(id.second);
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ProximityClusteringTree<Cluster,LevelInfo>::reestablishParenthood()
+    {
+        const unsigned nlevels = levels.size();
+        for (unsigned lev=0; lev<nlevels; ++lev)
+        {
+            const unsigned numnodes = levels[lev]->nodes.size();
+            for (unsigned inode=0; inode<numnodes; ++inode)
+            {
+                TreeNodeId id(lev, inode);
+                TreeNode* node = getNodeById(id);
+                if (node->parent)
+                    node->parent = getNodeById(node->parent->id);
+                const unsigned ndaus = node->daus.size();
+                for (unsigned idau=0; idau<ndaus; ++idau)
+                    node->daus[idau] = getNodeById(node->daus[idau]->id);
+            }
+        }
+    }
+
+    template<class Cluster, typename LevelInfo>
+    ProximityClusteringTree<Cluster,LevelInfo>::ProximityClusteringTree(
+        const ProximityClusteringTree<Cluster,LevelInfo>& r)
+        : AbsClusteringTree<Cluster,LevelInfo>(r),
+          distance(r.distance),
+          treeOwnsCalc(false)
+    {
+        // Allocate the memory for the levels
+        const unsigned nlevels = r.levels.size();
+        levels.reserve(nlevels);
+
+        // Copy the levels
+        for (unsigned lev=0; lev<nlevels; ++lev)
+            levels.push_back(new TreeLevel(*r.levels[lev]));
+
+        // Re-establish the parent-daughter relationships
+        reestablishParenthood();
+    }
+
+    template<class Cluster, typename LevelInfo>
+    ProximityClusteringTree<Cluster,LevelInfo>::~ProximityClusteringTree()
+    {
+        for (int lev = static_cast<int>(levels.size())-1; lev>=0; --lev)
+            delete levels[lev];
+        if (treeOwnsCalc)
+            delete distance;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ProximityClusteringTree<Cluster,LevelInfo>::clear()
+    {
+        const unsigned nlevels = levels.size();
+        if (nlevels > 1)
+        {
+            TreeLevel* topLevel = levels[0];
+            for (unsigned lev = nlevels-1; lev>0; --lev)
+                delete levels[lev];
+            levels.clear();
+            levels.push_back(topLevel);
+            topLevel->nodes[0].daus.clear();
+            topLevel->nodes[0].radius = 0.0;
+        }
+        recalculateRadii = false;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    ProximityClusteringTree<Cluster,LevelInfo>& 
+    ProximityClusteringTree<Cluster,LevelInfo>::operator=(
+        const ProximityClusteringTree& r)
+    {
+        if (this == &r)
+            return *this;
+
+        // Call the operator of the parent class
+        AbsClusteringTree<Cluster,LevelInfo>::operator=(r);
+
+        // Copy the distance calculator
+        if (treeOwnsCalc)
+        {
+            delete distance;
+            treeOwnsCalc = false;
+        }
+        distance = r.distance;
+
+        for (int lev = static_cast<int>(levels.size())-1; lev>=0; --lev)
+            delete levels[lev];
+        levels.clear();
+
+        // Allocate the memory for the levels
+        const unsigned nlevels = r.levels.size();
+        levels.reserve(nlevels);
+
+        // Copy the levels
+        for (unsigned lev=0; lev<nlevels; ++lev)
+            levels.push_back(new TreeLevel(*r.levels[lev]));
+
+        // Re-establish the parent-daughter relationships
+        reestablishParenthood();
+
+        return *this;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ProximityClusteringTree<Cluster,LevelInfo>::renumberLevels(
+        const unsigned startingLevel)
+    {
+        const unsigned n = levels.size();
+        for (unsigned i=startingLevel; i<n; ++i)
+        {
+            const unsigned nnodes = levels[i]->nodes.size();
+            for (unsigned inode=0; inode<nnodes; ++inode)
+                levels[i]->nodes[inode].id.first = i;
+        }
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ProximityClusteringTree<Cluster,LevelInfo>::disconnectFromParent(
+        TreeLevel* daulev)
+    {
+        const unsigned nnodes = daulev->nodes.size();
+        for (unsigned inode=0; inode<nnodes; ++inode)
+        {
+            TreeNode* node = &daulev->nodes[inode];
+            TreeNode* parent = node->parent;
+            node->parent = 0;
+            node->distanceToParent = DBL_MAX;
+            parent->daus.erase(parent->daus.find(node));
+        }
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ProximityClusteringTree<Cluster,LevelInfo>::connectToParent(
+        TreeLevel* daulev, TreeLevel* parentlev)
+    {
+        assert(daulev->scale < DBL_MAX);
+
+        const unsigned nnodes = daulev->nodes.size();
+        TreeNode* const topNode = &levels[0]->nodes[0];
+        if (parentlev == levels[0])
+        {
+            // Special case: connecting to the top level
+            for (unsigned inode=0; inode<nnodes; ++inode)
+            {
+                TreeNode* node = &daulev->nodes[inode];
+                node->parent = topNode;
+                node->distanceToParent = 0.0;
+                topNode->daus.push_back(node);
+            }
+        }
+        else
+        {
+            // Figure out the best node to connect to
+            const unsigned npar = parentlev->nodes.size();
+            for (unsigned inode=0; inode<nnodes; ++inode)
+            {
+                TreeNode* node = &daulev->nodes[inode];
+                double minDist = DBL_MAX;
+                TreeNode* bestpar = topNode;
+                for (unsigned ipar=0; ipar<npar; ++ipar)
+                {
+                    TreeNode* parNo = &parentlev->nodes[ipar];
+                    const double d = (*distance)(daulev->scale, node->jet,
+                                                 parentlev->scale, parNo->jet);
+                    if (d < minDist)
+                    {
+                        minDist = d;
+                        bestpar = parNo;
+                    }
+                }
+                node->parent = bestpar;
+                node->distanceToParent = bestpar == topNode ? 0.0 : minDist;
+                if (bestpar == topNode)
+                    bestpar->daus.push_back(node);
+                else
+                    bestpar->addDaughter(node);
+            }
+        }
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ProximityClusteringTree<Cluster,LevelInfo>::setLevelInfo(
+        const unsigned lev, const LevelInfo& info)
+    {
+        levels.at(lev)->unclustered = info;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    unsigned ProximityClusteringTree<Cluster,LevelInfo>::insert(
+        const double scale,
+        const std::vector<Cluster>& jets,
+        const LevelInfo& unclustered)
+    {
+        typedef AbsClusteringTree<Cluster,LevelInfo> B;
+
+        const unsigned njets = jets.size();
+        TreeLevel* newLevel = new TreeLevel(scale, unclustered, njets);
+        const unsigned lev = getLevel(scale) + 1;
+        const unsigned nlevels = levels.size();
+        assert(lev <= nlevels);
+
+        // Populate the level
+        for (unsigned i=0; i<njets; ++i)
+            newLevel->nodes.push_back(TreeNode(B::badId,jets[i]));
+
+        // Sort the nodes in reverse according to the cluster magnitude
+        std::sort(newLevel->nodes.begin(), newLevel->nodes.end(),
+                  std::greater<TreeNode>());
+
+        // Assign correct node ids to the sorted nodes
+        for (unsigned i=0; i<njets; ++i)
+            newLevel->nodes[i].id = TreeNodeId(lev,i);
+
+        // Connect the new level to the tree
+        if (lev == nlevels)
+        {
+            connectToParent(newLevel, levels[lev-1]);
+            levels.push_back(newLevel);
+        }
+        else
+        {
+            disconnectFromParent(levels[lev]);
+            connectToParent(newLevel, levels[lev-1]);
+            connectToParent(levels[lev], newLevel);
+            levels.insert(levels.begin()+lev, newLevel);
+            renumberLevels(lev + 1);
+        }
+
+        recalculateRadii = true;
+        return lev;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ProximityClusteringTree<Cluster,LevelInfo>::remove(const unsigned lev)
+    {
+        if (lev)
+        {
+            TreeLevel *r = levels.at(lev);
+            disconnectFromParent(r);
+            delete r;
+
+            const unsigned nlevels = levels.size();
+            if (lev == nlevels - 1)
+                levels.pop_back();
+            else
+            {
+                levels.erase(levels.begin() + lev);
+                renumberLevels(lev);
+                connectToParent(levels[lev], levels[lev-1]);
+            }
+            recalculateRadii = true;
+        }
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline unsigned ProximityClusteringTree<Cluster,LevelInfo>::nLevels() const
+    {
+        return levels.size();
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline unsigned ProximityClusteringTree<Cluster,LevelInfo>::nClusters(
+        const unsigned lev) const
+    {
+        return levels.at(lev)->nodes.size();
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline double ProximityClusteringTree<Cluster,LevelInfo>::getScale(
+        const unsigned lev) const
+    {
+        return levels.at(lev)->scale;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline const LevelInfo& 
+    ProximityClusteringTree<Cluster,LevelInfo>::getLevelInfo(
+        const unsigned lev) const
+    {
+        return levels.at(lev)->unclustered;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    unsigned ProximityClusteringTree<Cluster,LevelInfo>::getLevel(
+        const double scale) const
+    {
+        unsigned maxlevel = levels.size() - 1;
+        if (scale <= levels[maxlevel]->scale)
+            return maxlevel;
+        unsigned minlevel = 0;
+        while (maxlevel > minlevel + 1)
+        {
+            const unsigned trylevel = (maxlevel + minlevel)/2;
+            if (scale <= levels[trylevel]->scale)
+                minlevel = trylevel;
+            else
+                maxlevel = trylevel;
+        }
+        return scale == levels[maxlevel]->scale ? maxlevel : minlevel;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline const Cluster&
+    ProximityClusteringTree<Cluster,LevelInfo>::getCluster(
+        const TreeNodeId& id) const
+    {
+        return levels.at(id.first)->nodes.at(id.second).jet;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline const Cluster&
+    ProximityClusteringTree<Cluster,LevelInfo>::uncheckedCluster(
+        const TreeNodeId& id) const
+    {
+        return levels[id.first]->nodes[id.second].jet;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline double
+    ProximityClusteringTree<Cluster,LevelInfo>::clusterDistance(
+        const TreeNodeId& id1, const TreeNodeId& id2) const
+    {
+        assert(id1.first > 0 && id2.first > 0);
+        const double scale1 = levels.at(id1.first)->scale;
+        double scale2;
+        if (id1.first == id2.first)
+            scale2 = scale1;
+        else
+            scale2 = levels.at(id2.first)->scale;
+        return (*distance)(scale1, getCluster(id1),
+                           scale2, getCluster(id2));
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline double
+    ProximityClusteringTree<Cluster,LevelInfo>::uncheckedClusterDistance(
+        const TreeNodeId& id1, const TreeNodeId& id2) const
+    {
+        const double scale1 = levels[id1.first]->scale;
+        double scale2;
+        if (id1.first == id2.first)
+            scale2 = scale1;
+        else
+            scale2 = levels[id2.first]->scale;
+        return (*distance)(scale1, uncheckedCluster(id1),
+                           scale2, uncheckedCluster(id2));
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline double ProximityClusteringTree<Cluster,LevelInfo>::distanceToParent(
+        const TreeNodeId& id) const
+    {
+        return levels.at(id.first)->nodes.at(id.second).distanceToParent;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline void ProximityClusteringTree<Cluster,LevelInfo>::calculateRadii()
+    {
+        TreeNode* const topNode = &levels[0]->nodes[0];
+        const unsigned ndaus = topNode->daus.size();
+        for (unsigned idau=0; idau<ndaus; ++idau)
+            topNode->daus[idau]->updateRadius(*this);
+
+        // Do we want to assign the radius to the whole tree?
+        // It is tempting, but it is not clear what this
+        // concept means beause the top node does not have
+        // a location.
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline double ProximityClusteringTree<Cluster,LevelInfo>::nodeRadius(
+        const TreeNodeId& id) const
+    {
+        if (recalculateRadii)
+        {
+            (const_cast<ProximityClusteringTree*>(this))->calculateRadii();
+            recalculateRadii = false;
+        }
+        return levels.at(id.first)->nodes.at(id.second).radius;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline double
+    ProximityClusteringTree<Cluster,LevelInfo>::uncheckedNodeRadius(
+        const TreeNodeId& id) const
+    {
+        if (recalculateRadii)
+        {
+            (const_cast<ProximityClusteringTree*>(this))->calculateRadii();
+            recalculateRadii = false;
+        }
+        return levels[id.first]->nodes[id.second].radius;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline TreeNodeId ProximityClusteringTree<Cluster,LevelInfo>::parentId(
+        const TreeNodeId& id) const
+    {
+        TreeNode* par(levels.at(id.first)->nodes.at(id.second).parent);
+        if (par)
+            return par->id;
+        else
+        {
+            // Only the top node should be without the parent
+            assert(id.first == 0 && id.second == 0);
+            return AbsClusteringTree<Cluster,LevelInfo>::badId;
+        }
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline unsigned ProximityClusteringTree<Cluster,LevelInfo>::nDaughters(
+        const TreeNodeId& id) const
+    {
+        return levels.at(id.first)->nodes.at(id.second).daus.size();
+    }
+
+    template<class Cluster, typename LevelInfo>
+    inline TreeNodeId ProximityClusteringTree<Cluster,LevelInfo>::daughterId(
+        const TreeNodeId& id, unsigned idau) const
+    {
+        return levels.at(id.first)->nodes.at(id.second).daus.at(idau)->id;
+    }
+
+    template<class Cluster, typename LevelInfo>
+    void ProximityClusteringTree<Cluster,LevelInfo>::getLevelData(
+        const unsigned level, double* scale,
+        std::vector<Cluster>* jets,
+        LevelInfo* unclustered) const
+    {
+        assert(level);
+        assert(scale);
+        assert(jets);
+        assert(unclustered);
+
+        TreeLevel *thisLevel = levels.at(level);
+        *scale = thisLevel->scale;
+        *unclustered = thisLevel->unclustered;
+        const unsigned njets = thisLevel->nodes.size();
+        jets->clear();
+        jets->reserve(njets);
+        for (unsigned i=0; i<njets; ++i)
+            jets->push_back(thisLevel->nodes[i].jet);
+    }
+}

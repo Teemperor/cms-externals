@@ -1,0 +1,95 @@
+6.Nov.2012
+----------
+- prototype version of the reweighting with extra interaction installed
+  on top of the Z/gamma* exchange.
+- From now on we will shift comments to changelog of the whole TAUOLA.
+
+5.Nov.2012
+----------
+- Fixed configuration scripts for TauSpinner and the example
+- Example can now be compiled without MC-TESTER
+- Fixed number of warnings showed during compilation
+
+19.Jul.2012
+-----------
+- TauSpinner is now merged into Tauola++
+- Number of small changes introduced to the structure of the project.
+  Physical content remaining intact.
+
+23.Feb.2012
+-----------
+- Version 1.1 released
+- 'initialize_spiner' changed to 'initialize_spinner'
+
+21.Feb.2012
+-----------
+- Hopefully final solution for bug fixed on Feb 18 installed.
+  First tests show that all is now in order. 
+
+18.Feb.2012
+-----------
+- Second round of tests of 'getTauSpin' and unspin method
+  exhibited bug. Preliminary (but very slow) solution installed. 
+
+16.Jan.2012
+-----------
+- Added option 'setSpinOfSample' telling TauSpinner
+  if input sample is polarized
+- Added option 'getTauSpin' returing spin of tau
+  calculated during reweighting
+
+7.Dec.2011
+----------
+- Numerical instability in tau -> e nu_e fixed
+- Memory deallocation problem with MC-TESTER and root fixed.
+
+16.Nov.2011
+-----------
+- Small bug in definition of WID[0] removed
+- Added initialization of LHAPDF. Added path to Makefile.
+
+8.Nov.2011
+----------
+- Small cleanup of the main algorithm
+- Printout of calculated weight is now put as DEBUG option.
+- Removed 'parse.pl' which was used to parse files from Soshi Tsuno.
+  It is no longer needed.
+
+7.Nov.2011
+----------
+- Added longitudal tau polarization in pp -> Z -> tau+ tau-
+- Removed 'readParticlesFromTsuno'
+- X -> tau+ tau- does not need to fulfill energy-momentum conservation
+  if the difference is due to FSR (eg. photons).
+
+22.Aug.2011
+-----------
+- Fixed wrong information regarding WT options in tau-reweight-test.c
+
+8.Jul.2011
+----------
+- program now works correctly pair of bosons.
+  In previous versions the weight was calculated only for
+  the first boson found in the event. Now it is done for both
+  (independently of its flavor).
+- comments updated
+
+7.Jul.2011
+----------
+- program can read now from different inputs. That is why methods
+ 'readParticles' and 'filterEvent' were separated from main library
+  and renamed as 'readParticlesFromTsuno' 'filterEventFromTsuno'
+- created 'readParticlesFromTAUOLA_HepMC' it can be used
+  alternatively to 'readParticlesFromTsuno'
+- improved decay channel identification; until now tau decay products
+  had to be ordered exactly as prepaed by TAUOLA.
+- memory leaks completely removed; previous versions were not able
+  to process more than 2Mevents
+
+2.Jul.2011
+----------
+- 4-pi decay channels added
+
+30.Jun.2011
+-----------
+- first stable and tested version prepared

@@ -1,0 +1,118 @@
+#include <cassert>
+#include <cmath>
+
+namespace fftjet {
+    template<typename Real>
+    double AbsKernel1d::scanInterval(Real* to, const unsigned nx,
+                                     const double x0, const double scale,
+                                     const double xmin, const double xmax,
+                                     const double normArea,
+                                     const bool renormalize) const
+    {
+        assert(to);
+        assert(nx);
+        assert(scale > 0.0);
+
+        const double xstep = (xmax - xmin)/nx;
+        long double sum = 0.0L;
+        for (unsigned ix=0; ix<nx; ++ix)
+        {
+            const double dx = xmin + (ix + 0.5)*xstep - x0;
+            const double fval = intervalAverage(dx, scale, xstep);
+            sum += fval;
+            to[ix] = fval;
+        }
+
+        const double scanArea = static_cast<double>(sum)*xstep;
+        if (renormalize)
+        {
+            assert(scanArea);
+            const Real norm = normArea/scanArea;
+            for (unsigned ix=0; ix<nx; ++ix)
+                to[ix] *= norm;
+        }
+
+        return scanArea;
+    }
+
+    template<typename Real>
+    double AbsKernel1d::scanCircle(Real* to, const unsigned nPhi,
+                                   const double phi0, const double scale,
+                                   const double phiBin0Edge,
+                                   const double normArea,
+                                   const bool renormalize) const
+    {
+        assert(to);
+        assert(nPhi);
+        assert(scale > 0.0);
+
+        const double phiStep = (2.0*M_PI)/nPhi;
+        long double sum = 0.0L;
+
+        for (unsigned iphi=0; iphi<nPhi; ++iphi)
+        {
+            double dphi = phiBin0Edge + (iphi + 0.5)*phiStep - phi0;
+            while (dphi > M_PI)
+                dphi -= (2.0*M_PI);
+            while (dphi < -M_PI)
+                dphi += (2.0*M_PI);
+            const double fval = intervalAverage(dphi, scale, phiStep);
+            sum += fval;
+            to[iphi] = fval;
+        }
+
+        const double scanArea = static_cast<double>(sum)*phiStep;
+        if (renormalize)
+        {
+            assert(scanArea);
+            const Real norm = normArea/scanArea;
+            for (unsigned iphi=0; iphi<nPhi; ++iphi)
+                to[iphi] *= norm;
+        }
+
+        return scanArea;
+    }
+
+    template<typename Real>
+    double AbsKernel1d::scanFFT(Real* to, const unsigned nx,
+                                const double scale,
+                                const double normArea,
+                                const bool normalize) const
+    {
+        assert(to);
+        assert(nx);
+        assert(scale > 0.0);
+
+        const double dx = 2.0*M_PI/nx;
+        double fval = intervalAverage(0.0, scale, dx);
+        to[0] = fval;
+        long double sum = fval;
+        unsigned ipos = 0, ineg = nx;
+
+        while (1)
+        {
+            if (++ipos == ineg)
+                break;
+            fval = intervalAverage(dx*ipos, scale, dx);
+            sum += fval;
+            to[ipos] = fval;
+
+            if (--ineg == ipos)
+                break;
+            fval = intervalAverage(-dx*ipos, scale, dx);
+            sum += fval;
+            to[ineg] = fval;
+        }
+        const double areaUnderTheScan = static_cast<double>(sum)*dx;
+
+        if (normalize)
+        {
+            assert(areaUnderTheScan);
+            const Real norm = normArea/areaUnderTheScan;
+            for (unsigned i=0; i<nx; ++i)
+                to[i] *= norm;
+        }
+
+        return areaUnderTheScan;
+    }
+}

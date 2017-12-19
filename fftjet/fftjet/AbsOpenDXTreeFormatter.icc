@@ -1,0 +1,139 @@
+namespace fftjet {
+
+    template<typename Cluster, typename LevelInfo>
+    class SparseClusteringTree;
+
+namespace Private {
+    template
+    <
+        typename Cluster,
+        typename LevelInfo,
+        template <typename, typename> class AbsTree
+    >
+    void AbsOpenDXTreeFormatterWriter<Cluster,LevelInfo,AbsTree>::operator()(
+        const AbsOpenDXTreeFormatter<Cluster,LevelInfo,AbsTree>& f,
+        const AbsTree<Cluster,LevelInfo>& tree,
+        const unsigned long runNum, const unsigned long evNum,
+        std::ostream& os)
+    {
+        // Collect all the info needed to build glyphs
+        std::vector<DXGlyphInfo> glyphInfo;
+        {
+            // Build a mapping from TreeNodeId into a linear sequence.
+            // The root cluster is skipped. The mapping will work like this:
+            // n_sequential = accumulatedClusters[id.first] + id.second.
+            const unsigned nclusters = tree.nClusters();
+            const unsigned nlevels = tree.nLevels();
+            std::vector<unsigned> accumulatedClusters;
+            {
+                unsigned totalClus = 0;
+                accumulatedClusters.reserve(nlevels);
+                accumulatedClusters.push_back(0);
+                for (unsigned lev=1; lev<nlevels; ++lev)
+                {
+                    const unsigned nclus = tree.nClusters(lev);
+                    accumulatedClusters.push_back(totalClus);
+                    totalClus += nclus;
+                }
+                assert(totalClus == nclusters - 1);
+
+                // There seems to be no easy way to come up with a correct
+                // OpenDX file format for an empty tree
+                assert(totalClus);
+            }
+
+            const TreeNodeId rootId(0,0);
+            for (unsigned lev=1; lev<nlevels; ++lev)
+            {
+                TreeNodeId id(lev,0);
+                const unsigned nclus = tree.nClusters(lev);
+                for (; id.second<nclus; ++id.second)
+                {
+                    const Cluster& clus(tree.getCluster(id));
+                    const TreeNodeId parId(tree.parentId(id));
+                    int n_parent = -1;
+                    if (parId != tree.badId && parId != rootId)
+                        n_parent = accumulatedClusters[parId.first] + 
+                            parId.second;
+                    glyphInfo.push_back(f.buildGlyph(clus, n_parent));
+                }
+            }
+            assert(glyphInfo.size() == nclusters - 1);
+        }
+
+        // Fix the connections
+        fixDXCylindricalGeometry(&glyphInfo, f.etaRange_);
+
+        // Remap the scales
+        remapDXscales(&glyphInfo, f.scaleRange_);
+
+        // Write out the set of glyphs
+        writeDXGlyphVector(glyphInfo, runNum, evNum, os);
+    }
+
+    // Partial specialization using SparseClusteringTree as the tree class
+    template
+    <
+        typename Cluster,
+        typename LInfo
+    >
+    struct AbsOpenDXTreeFormatterWriter<Cluster,LInfo,SparseClusteringTree>
+    {
+        void operator()(
+           const AbsOpenDXTreeFormatter<Cluster,LInfo,SparseClusteringTree>& f,
+           const SparseClusteringTree<Cluster,LInfo>& tree,
+           const unsigned long runNum, const unsigned long evNum,
+           std::ostream& os)
+        {
+            // The clusters are already arranged in a linear array.
+            // The only thing we need to do is to fix the parent-daughter
+            // relationships (there is a top node which shifts the numbering
+            // we need by 1).
+            std::vector<DXGlyphInfo> glyphInfo;
+            const unsigned numNodes = tree.size();
+
+            // Do not know how to write an empty tree
+            assert(numNodes > 1U);
+
+            // Cycle over nodes and dump them out
+            for (unsigned i=1U; i<numNodes; ++i)
+            {
+                const typename SparseClusteringTree<Cluster,LInfo>::Node& node(
+                    tree.uncheckedNode(i));
+
+                const unsigned parentId = node.parent();
+                assert(parentId != tree.badId);
+
+                const int parent = static_cast<int>(parentId) - 1;
+                glyphInfo.push_back(f.buildGlyph(node.getCluster(), parent));
+            }
+
+            // Fix the connections
+            fixDXCylindricalGeometry(&glyphInfo, f.etaRange_);
+
+            // Remap the scales
+            remapDXscales(&glyphInfo, f.scaleRange_);
+
+            // Write out the set of glyphs
+            writeDXGlyphVector(glyphInfo, runNum, evNum, os);
+        }
+    };
+}
+}
+
+namespace fftjet {
+    template
+    <
+        typename Cluster,
+        typename LevelInfo,
+        template <typename, typename> class AbsTree
+    >
+    inline void AbsOpenDXTreeFormatter<Cluster,LevelInfo,AbsTree>::write(
+        const AbsTree<Cluster,LevelInfo>& tree,
+        const unsigned long runNum, const unsigned long evNum,
+        std::ostream& os) const
+    {
+        Private::AbsOpenDXTreeFormatterWriter<Cluster,LevelInfo,AbsTree>()(
+            *this, tree, runNum, evNum, os);
+    }
+}

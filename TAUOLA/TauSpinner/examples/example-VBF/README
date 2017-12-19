@@ -1,0 +1,28 @@
+This directory includes programs:
+-- # example-VBF.cxx            on how the reweigting can be invoked.
+                                An example output is included: example-VBF.out
+   # read_particles_for_VBF.cxx includes code for reading the event from HepMC 
+                                to make invocation possible. Its use is 
+				restricted to the case when parton level hard 
+				process 2--> 4 is written only. Tau decay 
+				products present and intermediade bosons 
+				absent (or present). WARNING: user is expected
+				to replace this code with his own, adopted
+				to real event complexity. However there is 
+				no need for incoming parton momenta and 
+				outgoing partons can be (are expected to be)
+				the four momenta of jets.
+				read_particles_for_VBF.cxx is prepared to work 
+				with files form MadGraph. That is why, 
+				on flight decays of taus with tauola, 
+				are provided. Check/adaptation for HepMC events 
+				to be in GeV units is performed
+-- # lhef-to-hepmc.cxx		simple translator from LHE to HepMC format
+-- # ../../src/VBF/vbftests.cxx example, with implemented reweighting 
+     				between groups of parton level processes.
+				Some of them used for plots of paper: 
+				Documentation on TauSpinner extension 
+				the case of tau-lepton and jet pairs production 
+				at LHC by J. Kalinowski, W. Kotlarski, 
+				E. Richter-Was and Z. Was
+-- for user VBF matrix element  see SPIN2/README

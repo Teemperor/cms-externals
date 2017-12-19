@@ -1,0 +1,64 @@
+#include <cassert>
+#include "fftjet/invertJetResponse.hh"
+
+namespace fftjet {
+    template <typename Jet>
+    JetMagnitudeMapper2d<Jet>::~JetMagnitudeMapper2d()
+    {
+        delete interp;
+        if (ownFcn)
+            delete fcn;
+    }
+
+    template <typename Jet>
+    template <class Functor2d>
+    JetMagnitudeMapper2d<Jet>::JetMagnitudeMapper2d(
+        const Functor2d& f, const Functor1<double,Jet>* predictorCalc,
+        const bool ownPredictor,
+        const double minPredictor, const double maxPredictor,
+        unsigned nPredPoints, const double maxMagnitude, unsigned nMagPoints)
+        : interp(0),
+          fcn(predictorCalc),
+          ownFcn(ownPredictor)
+    {
+        assert(minPredictor < maxPredictor);
+        assert(maxMagnitude > 0.0);
+        if (nPredPoints < 1)
+            nPredPoints = 1;
+        if (nMagPoints < 2)
+            nMagPoints = 2;
+
+        // Figure out the maximum response value
+        double bigMagnitude = 0.0;
+        const double predStep = (maxPredictor - minPredictor)/nPredPoints;
+        for (unsigned ipred=0; ipred<nPredPoints; ++ipred)
+        {
+            const double pred = minPredictor + predStep*(ipred + 0.5);
+            const double resp = f(pred, maxMagnitude);
+            if (maxMagnitude*resp > bigMagnitude)
+                bigMagnitude = maxMagnitude*resp;
+        }
+
+        // Go over all predictor and response values and invert
+        // the response curve
+        assert(bigMagnitude > 0.0);
+        const double respStep = bigMagnitude/(nMagPoints - 1);
+        double *data = new double[nPredPoints*nMagPoints];
+        for (unsigned ipred=0; ipred<nPredPoints; ++ipred)
+        {
+            const double pred = minPredictor + predStep*(ipred + 0.5);
+            data[ipred*nMagPoints] = 1.0/f(pred, 0.0);
+            for (unsigned iresp=1; iresp<nMagPoints; ++iresp)
+            {
+                const double y = respStep*iresp;
+                data[ipred*nMagPoints+iresp] = invertJetResponse2d(f, pred, y)/y;
+            }
+        }
+
+        interp = new LinearInterpolator2d(
+            data, nPredPoints, minPredictor, maxPredictor,
+            nMagPoints, -respStep/2.0, bigMagnitude+respStep/2.0,
+            0.0, false);
+        delete [] data;
+    }
+}

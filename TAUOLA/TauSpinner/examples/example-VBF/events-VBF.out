@@ -1,0 +1,141 @@
+
+ *************************************
+ *     TAUOLA C++ Interface v1.1.4   *
+ *-----------------------------------*
+ *                                   *
+ *   (c) Nadia    Davidson,   (1,2)  *
+ *       Gizo     Nanava,     (3)    *
+ *       Tomasz   Przedzinski,(4)    *
+ *       Elzbieta Richter-Was,(2,4)  *
+ *       Zbigniew Was         (2,5)  *
+ *                                   *
+ *  1) Unimelb, Melbourne, Australia *
+ *  2)     INP, Krakow, Poland       *
+ *  3) University Bonn, Germany      *
+ *  4)      UJ, Krakow, Poland       *
+ *  5)    CERN, Geneva, Switzerland  *
+ *************************************
+Reading SANC input files.
+File 'table1-1.txt'  missing... skipped.
+File 'table2-2.txt'  missing... skipped.
+File 'table11-11.txt' missing... skipped.
+
+ ------------------------------------------------------
+ TauSpinner v2.0.3
+ -----------------
+   11.Jul.2017    
+ by Z. Czyczula (until 2015), T. Przedzinski, E. Richter-Was, Z. Was,
+  matrix elements implementations 
+  also J. Kalinowski, W. Kotlarski and  M. Bachmani
+ ------------------------------------------------------
+ Ipp - true for pp collision; otherwise polarization
+       of individual taus from Z/gamma* is set to 0.0
+ Ipp    = 1
+ CMSENE - used in PDF calculations; only if Ipp = true
+          and only for Z/gamma*
+ CMSENE = 13000
+ Ipol - relevant for Z/gamma* decays 
+ 0 - events generated without spin effects                
+ 1 - events generated with all spin effects               
+ 2 - events generated with spin correlations and <pol>=0  
+ 3 - events generated with spin correlations and
+     polarization but missing angular dependence of <pol>
+ Ipol    = 1
+ Ipol - relevant for Z/gamma* decays 
+ NOTE: For Ipol=0,1 algorithm is identical.               
+       However in user program role of wt need change.    
+ nonSM2  = 0
+ 1/0 extra term in cross section, density matrix on/off   
+ nonSMN  = 0
+ 1/0 extra term in cross section, for shapes only? on/off 
+ note KEY - for options of matrix elements calculations   
+            in cases of final states  with two jets       
+ ------------------------------------------------------   
+WARNING from TAUOLA:
+Momentum not conserved in the vertex:
+
+Vertex:       -3 ID:    0 (X,cT)=+3.47e+00,-1.52e-02,+4.80e+01,+4.81e+01
+ I: 1     10006      -15 +1.18e+02,-5.16e-01,+1.63e+03,+1.63e+03   2        -3
+ O: 2     10008      -16 +4.45e+01,+3.59e-01,+6.08e+02,+6.10e+02   1
+          10009      213 +7.34e+01,-8.75e-01,+1.02e+03,+1.02e+03   2        -4
+WARNING from TAUOLA:
+Momentum not conserved in the vertex:
+
+Vertex:       -3 ID:    0 (X,cT)=+3.47e+00,-1.52e-02,+4.80e+01,+4.81e+01
+ I: 1     10006      -15 +1.18e+02,-5.16e-01,+1.63e+03,+1.63e+03   2        -3
+ O: 2     10008      -16 +4.45e+01,+3.59e-01,+6.08e+02,+6.10e+02   1
+          10009      213 +7.34e+01,-8.75e-01,+1.02e+03,+1.02e+03   2        -4
+EVT: 100
+
+No of events read from the file: 101
+
+No of events processed for spin weight: 101
+WT average for these processed events: 0.919511
+
+
+
+ ***************************************************************************
+ *                         *****TAUOLA LIBRARY: VERSION 2.9 ******         *
+ *                         ***********October 2011 ***************         *
+ *                         **AUTHORS: S.JADACH, Z.WAS*************         *
+ *                         **R. DECKER, M. JEZABEK, J.H.KUEHN*****         *
+ *                         **AVAILABLE FROM: www.cern.ch/wasm****          *
+ *                         ***** PUBLISHED IN COMP. PHYS. COMM.***         *
+ *                         0: Physics initialization  CLEO collab          *
+ *                          see Alain Weinstein www home page:             *
+ *                         http://www.cithep.caltech.edu/~ajw/             *
+ *                         /korb_doc.html#files                            *
+ *                         1: Physics initialization RChL of:              *
+ *                          O. Shekhovtsova, T. Przedzinski,               *
+ *                          P. Roig and Z. Was                             *
+ *                          IFJPAN-2013-5, UAB-FT-731                      *
+ *                         *******CPC 76 (1993) 361          *****         *
+ *                         **5 or more pi dec.: precision limited          *
+ *                         ****DEKAY ROUTINE: INITIALIZATION******         *
+ *                   0     JAK1   = DECAY MODE TAU+                        *
+ *                   0     JAK2   = DECAY MODE TAU-                        *
+ ***************************************************************************
+
+ *                   0     IVER   = hadronic current version           *
+  RANMAR INITIALIZED:   54217137           0         0
+
+ ***************************************************************************
+
+  KORB: rho/rhop -> pi-pi0 mixing:
+  KORB: rho   =  0.76990002      0.15120000    
+  KORB: rhop  =   1.3700000      0.50999999     -0.11000000    
+  KORB: K*/K*prime -> Kpi mixing:
+  KORB: kstp  =   1.7000000      0.23500000     -3.79999988E-02
+  KORB: a1/a1prime -> 3pi, KKpi mixing:
+  KORB: a1    =   1.2750000      0.69999999    
+  KORB: a1prim=   1.4610000      0.25000000       0.0000000    
+  KORB: K1A/K1B -> Kpipi mixing:
+  KORB: K1A   =   1.2700000      9.00000036E-02   1.0000000    
+  KORB: K1B   =   1.4020000      0.17399999      0.80000001    
+  KORB: rho/rhop/rhopp -> 4pi mixing:
+  KORB: rho   =  0.76990002      0.15120000    
+  KORB: rhopp =   1.4650000      0.31000000     -0.11000000    
+  KORB: rhoppp=   1.7000000      0.23500000     -0.11000000    
+  KORB: 3PI-PI0 PARAMS:   0.0000000      0.12420000      0.16040000      0.27110001      0.44430000    
+  KORB: PI-3PI0 PARAMS:   0.0000000       1.0000000    
+  In F3pi: add (rho-pi S-wave) + (rhop-pi S-wave) +
+               (rho-pi D-wave) + (rhop-pi D-wave) +
+    (f2 pi D-wave) + (sigmapi S-wave) + (f0pi S-wave)
+ *************************************
+ *       LHAPDF Version 5.8.6        *
+ *   Configured for the following:   *
+ *             All PDFs              *
+ *         FULL MEMORY option        *
+ *    Maximum  3 concurrent set(s)   *
+ *************************************
+
+ >>>>>> PDF description: <<<<<<
+ CTEQ6L1 - LO with LO alpha_s                                    
+ Reference:                                                      
+ J. Pumplin, D.R. Stump, J. Huston, H.L. Lai, P. Nadolsky,       
+ W.K. Tung                                                       
+ hep-ph/0201195                                                  
+ >>>>>>                   <<<<<<
+
+ Parametrization: CTEQ6           
+

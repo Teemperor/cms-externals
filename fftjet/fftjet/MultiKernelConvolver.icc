@@ -1,0 +1,223 @@
+#include <cassert>
+#include <cmath>
+#include <cfloat>
+#include <utility>
+#include <algorithm>
+
+#include "fftjet/scanFrequencyKernel.hh"
+
+namespace fftjet {
+    template<typename Real, typename Complex>
+    MultiKernelConvolver<Real, Complex>::MultiKernelConvolver(
+        const AbsFFTEngine<Real,Complex>* fftEngine,
+        const KernelSet* kernelSeq,
+        const unsigned minFixBin, const unsigned maxFixBin)
+        : AbsKernelConvolver<Real, Complex>(
+              fftEngine, minFixBin, maxFixBin),
+          kernelSequence(kernelSeq),
+          denomBuf(0)
+    {
+        assert(!kernelSequence->isEmpty());
+    }
+
+    template<typename Real, typename Complex>
+    MultiKernelConvolver<Real, Complex>::~MultiKernelConvolver()
+    {
+        const AbsFFTEngine<Real,Complex>* const engine = 
+            AbsKernelConvolver<Real, Complex>::fftEngine;
+        engine->destroyComplex(denomBuf);
+    }
+
+    template<typename Real, typename Complex>
+    void MultiKernelConvolver<Real, Complex>::regularizeDenominator(
+        Complex* imageBuf) const
+    {
+        assert(denomBuf);
+        const double reg(kernelSequence->regularizationFraction());
+        assert(reg > 0.0);
+
+        const AbsFFTEngine<Real,Complex>* const engine = 
+            AbsKernelConvolver<Real, Complex>::fftEngine;
+        const unsigned nEta = engine->nEta();
+        const unsigned nPhi = engine->nPhi();
+
+        // Sort the frequencies by amplitude
+        std::vector<std::pair<double,std::pair<unsigned,unsigned> > > v;
+        for (unsigned ieta=0; ieta<nEta; ++ieta)
+            for (unsigned iphi=0; iphi<nPhi; ++iphi)
+            {
+                const double p(std::norm(engine->getTransformPoint(
+                                             denomBuf, ieta, iphi)));
+                v.push_back(std::make_pair(p, std::make_pair(ieta, iphi)));
+            }
+        std::sort(v.begin(), v.end());
+
+        // Kill the requested fraction of frequencies
+        const std::complex<double> zero(0.0, 0.0);
+        const unsigned nkill = static_cast<unsigned>(reg*nEta*nPhi);
+        for (unsigned i=0; i<nkill; ++i)
+            engine->setTransformPoint(imageBuf, v[i].second.first,
+                                      v[i].second.second, zero);
+
+        // In addition, kill all frequencies with amplitudes close to 0
+        const unsigned nbins = nEta*nPhi;
+        for (unsigned i=nkill; i<nbins; ++i)
+        {
+            if (v[i].first == 0.0)
+                engine->setTransformPoint(imageBuf, v[i].second.first,
+                                          v[i].second.second, zero);
+            else
+                break;
+        }
+    }
+
+    template<typename Real, typename Complex>
+    KernelData<Real,Complex>
+    MultiKernelConvolver<Real, Complex>::buildKernelImage(const double scale)
+    {
+        const AbsFFTEngine<Real,Complex>* const engine = 
+            AbsKernelConvolver<Real, Complex>::fftEngine;
+        const unsigned nEta = engine->nEta();
+        const unsigned nPhi = engine->nPhi();
+        const unsigned nbins = nEta*nPhi;
+        const double binArea = 4.0*M_PI*M_PI/nbins;
+
+        // Allocate and/or check existence of the necessary buffers
+        Complex* cbuf = AbsKernelConvolver<Real, Complex>::complexBuffer;
+        assert(cbuf);
+        Real* tempBuffer = new Real[nbins];
+        Complex* imageBuf = engine->allocateComplex();
+        assert(imageBuf);
+        bool imageBufFilled = false;
+
+        // Process the set of filters
+        const unsigned nfilters = kernelSequence->filter.size();
+        for (unsigned i=0; i<nfilters; ++i)
+        {
+            if (imageBufFilled)
+            {
+                scanFrequencyKernel(this->fftEngine, kernelSequence->filter[i],
+                                    scale, cbuf);
+                engine->multiplyTransforms(imageBuf, cbuf, imageBuf);
+            }
+            else
+            {
+                scanFrequencyKernel(this->fftEngine, kernelSequence->filter[i],
+                                    scale, imageBuf);
+                imageBufFilled = true;
+            }
+        }
+
+        // Process the numerator
+        double area = 0.0;
+        const unsigned nnum = kernelSequence->numerator.size();
+        for (unsigned i=0; i<nnum; ++i)
+        {
+            area = kernelSequence->numerator[i]->scanFFT(
+                tempBuffer, nEta, nPhi, scale, binArea);
+            if (imageBufFilled)
+            {
+                engine->transformForward(tempBuffer, cbuf);
+                engine->multiplyTransforms(imageBuf, cbuf, imageBuf);
+            }
+            else
+            {
+                engine->transformForward(tempBuffer, imageBuf);
+                imageBufFilled = true;
+            }
+        }
+
+        // Everything else goes into the denominator
+        if (!imageBufFilled)
+        {
+            engine->setToReal(imageBuf, static_cast<Real>(1.0));
+            imageBufFilled = true;
+        }
+
+        // Process the denoisers
+        const unsigned ndenoise = kernelSequence->denoiser.size();
+        if (ndenoise)
+        {
+            if (denomBuf == 0)
+            {
+                denomBuf = engine->allocateComplex();
+                assert(denomBuf);
+            }
+            engine->setToReal(denomBuf, static_cast<Real>(1.0));
+
+            for (unsigned i=0; i<ndenoise; ++i)
+            {
+                kernelSequence->denoiser[i]->scanFFT(
+                    tempBuffer, nEta, nPhi, scale, binArea);
+                engine->transformForward(tempBuffer, cbuf);
+                engine->amplitudeSquared(cbuf, cbuf);
+                engine->addTransforms(denomBuf, cbuf, cbuf);
+                engine->divideTransforms(imageBuf, cbuf, imageBuf);
+            }
+        }
+
+        // Process the denominator
+        const unsigned ndenom = kernelSequence->denominator.size();
+        if (ndenom)
+        {
+            if (kernelSequence->regularizationFraction() > 0.0)
+            {
+                // We will need to regularize the deconvolution.
+                // For that, we first need to build the complete
+                // denominator.
+                if (denomBuf == 0)
+                {
+                    denomBuf = engine->allocateComplex();
+                    assert(denomBuf);
+                }
+                kernelSequence->denominator[0]->scanFFT(
+                    tempBuffer, nEta, nPhi, scale, binArea);
+                engine->transformForward(tempBuffer, denomBuf);
+                for (unsigned i=1; i<ndenom; ++i)
+                {
+                    kernelSequence->denominator[i]->scanFFT(
+                        tempBuffer, nEta, nPhi, scale, binArea);
+                    engine->transformForward(tempBuffer, cbuf);
+                    engine->multiplyTransforms(denomBuf, cbuf, denomBuf);
+                }
+
+                // Regularize by setting some fraction of the numerator
+                // frequencies to 0
+                regularizeDenominator(imageBuf);
+
+                // Finally, deconvolute
+                engine->deconvolutionRatio(imageBuf, denomBuf, imageBuf);
+            }
+            else
+            {
+                // Simply divide by the denominator
+                for (unsigned i=0; i<ndenom; ++i)
+                {
+                    kernelSequence->denominator[i]->scanFFT(
+                        tempBuffer, nEta, nPhi, scale, binArea);
+                    engine->transformForward(tempBuffer, cbuf);
+                    engine->deconvolutionRatio(imageBuf, cbuf, imageBuf);
+                }
+            }
+        }
+
+        // Do we have to transform interconvolved kernels
+        // back to the normal space?
+        if (!(nnum == 1 && nfilters == 0 && ndenom == 0 && ndenoise == 0))
+        {
+            engine->transformBack(imageBuf, tempBuffer);
+            const Real norm = normalizeFrequencyAsDensity(
+                this->fftEngine, imageBuf, tempBuffer);
+            for (unsigned i=0; i<nbins; ++i)
+                tempBuffer[i] /= norm;
+            area = static_cast<double>(norm);
+        }
+
+        // Build the efficiency normalization curve, if requested
+        Real* norm = 0;
+        if (AbsKernelConvolver<Real, Complex>::fixEfficiency)
+            norm = AbsKernelConvolver<Real, Complex>::buildEffNorm(tempBuffer);
+
+        return KernelData<Real,Complex>(tempBuffer, imageBuf, norm, area);
+    }
+}

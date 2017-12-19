@@ -1,0 +1,50 @@
+// ----------------------------------------------------------------------
+// readIsajet.cc
+// Author: Lynn Garren
+//
+// read the isajet particle table for testing purposes
+// note that isaparticles.dat was created with PRTLST(...)
+//
+// Usage:  readIsajet 
+//
+// ----------------------------------------------------------------------
+
+#include <fstream>
+
+#include "HepPDT/defs.h"
+#include "HepPDT/TableBuilder.hh"
+#include "HepPDT/ParticleDataTable.hh"
+
+int main()
+{
+    char pdgfile[300] = "@top_srcdir@/examples/data/isaparticles.dat";
+    const char outfile[] = "testReadIsajet.out";
+    // construct empty PDT
+    HepPDT::ParticleDataTable datacol( "Isajet Table" );
+    {
+	// open input files
+	std::ifstream pdfile( pdgfile );
+	if( !pdfile ) { 
+	  std::cerr << "cannot open " << pdgfile << std::endl;
+	  exit(-1);
+	}
+        // Construct table builder
+        HepPDT::TableBuilder  tb(datacol);
+	// read the input - put as many here as you want
+	if( !HepPDT::addIsajetParticles( pdfile, tb ) ) { 
+	    std::cout << "error reading " << pdgfile << std::endl; 
+	}
+    }	// the tb destructor fills datacol
+    std::ofstream wpdfile( outfile );
+    if( !wpdfile ) { 
+      std::cerr << "cannot open " << outfile << std::endl;
+      exit(-1);
+    }
+    datacol.writeParticleData(wpdfile);
+    wpdfile << std::endl;
+
+    // particle info
+    datacol.writeParticleInfo(wpdfile);
+    
+    return 0;
+}

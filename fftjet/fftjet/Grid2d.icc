@@ -1,0 +1,797 @@
+#include <cassert>
+#include <cstring>
+#include <cmath>
+
+#include "fftjet/rectangleOverlap.hh"
+#include "fftjet/StatAccumulator.hh"
+#include "fftjet/binaryIO.hh"
+
+namespace fftjet {
+    // eta bin number can be out of range
+    template<typename Real>
+    inline int Grid2d<Real>::getEtaBin(const Real eta) const
+    {
+        return static_cast<int>(floor((eta - etaMin_)*nEta_/etaRange_));
+    }
+
+    // phi bin number can NOT be out of range
+    template<typename Real>
+    inline unsigned Grid2d<Real>::getPhiBin(const Real phi) const
+    {
+        const int nphi(static_cast<int>(nPhi_));
+        int iphi(static_cast<int>(floor((phi - phiBin0Edge_)/
+                                        phiBinWidth_)) % nphi);
+        if (iphi < 0)
+            iphi += nphi;
+        return iphi;
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::etaBinCenter(const int etaBin) const
+    {
+        return etaMin_ + (etaBin + static_cast<Real>(1)/2)*etaRange_/nEta_;
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::etaFromBinNum(const Real etaBin) const
+    {
+        return etaMin_ + (etaBin + static_cast<Real>(1)/2)*etaRange_/nEta_;
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::phiBinCenter(const unsigned phiBin) const
+    {
+        return phiBin0Edge_ + (phiBin + static_cast<Real>(1)/2)*phiBinWidth_;
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::phiFromBinNum(const Real phiBin) const
+    {
+        return phiBin0Edge_ + (phiBin + static_cast<Real>(1)/2)*phiBinWidth_;
+    }
+
+    template<typename Real>
+    bool Grid2d<Real>::operator==(const Grid2d& r) const
+    {
+        const bool metaDataEq = 
+            title_ == r.title_ &&
+            phiBinWidth_ == r.phiBinWidth_ &&
+            etaMin_ == r.etaMin_ &&
+            etaMax_ == r.etaMax_ &&
+            etaRange_ == r.etaRange_ &&
+            phiBin0Edge_ == r.phiBin0Edge_ &&
+            nEta_ == r.nEta_ &&
+            nPhi_ == r.nPhi_;
+        if (!metaDataEq)
+            return false;
+        const unsigned nbins = nEta_*nPhi_;
+        for (unsigned i=0; i<nbins; ++i)
+            if (data_[i] != r.data_[i])
+                return false;
+        return true;
+    }
+
+    template<typename Real>
+    inline bool Grid2d<Real>::operator!=(const Grid2d& r) const
+    {
+        return !(*this == r);
+    }
+
+    template<typename Real>
+    inline unsigned Grid2d<Real>::nEta() const
+    {
+        return nEta_;
+    }
+
+    template<typename Real>
+    inline unsigned Grid2d<Real>::nPhi() const
+    {
+        return nPhi_;
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::etaMin() const
+    {
+        return etaMin_;
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::etaMax() const
+    {
+        return etaMax_;
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::phiBin0Edge() const
+    {
+        return phiBin0Edge_;
+    }
+
+    template<typename Real>
+    inline const char* Grid2d<Real>::title() const
+    {
+        return title_.c_str();
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::phiBinWidth() const
+    {
+        return phiBinWidth_;
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::etaBinWidth() const
+    {
+        if (etaRange_ > 0)
+            return etaRange_/nEta_;
+        else
+            return -etaRange_/nEta_;
+    }
+
+    template<typename Real>
+    inline bool Grid2d<Real>::isNonNegative() const
+    {
+        const Real zero = static_cast<Real>(0);
+        const unsigned nbins = nEta_*nPhi_;
+        for (unsigned i=0; i<nbins; ++i)
+            if (data_[i] < zero)
+                return false;
+        return true;
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::findMinimum(unsigned* etaBin,
+                                   unsigned* phiBin, Real* min) const
+    {
+        assert(etaBin);
+        assert(phiBin);
+        assert(min);
+
+        *etaBin = 0;
+        *phiBin = 0;
+        *min = data_[0];
+
+        for (unsigned ieta=0; ieta<nEta_; ++ieta)
+        {
+            const Real* d = data_ + ieta*nPhi_;
+            for (unsigned iphi=0; iphi<nPhi_; ++iphi)
+                if (d[iphi] < *min)
+                {
+                    *etaBin = ieta;
+                    *phiBin = iphi;
+                    *min = d[iphi];
+                }
+        }
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::findMaximum(unsigned* etaBin,
+                                   unsigned* phiBin, Real* max) const
+    {
+        assert(etaBin);
+        assert(phiBin);
+        assert(max);
+
+        *etaBin = 0;
+        *phiBin = 0;
+        *max = data_[0];
+
+        for (unsigned ieta=0; ieta<nEta_; ++ieta)
+        {
+            const Real* d = data_ + ieta*nPhi_;
+            for (unsigned iphi=0; iphi<nPhi_; ++iphi)
+                if (d[iphi] > *max)
+                {
+                    *etaBin = ieta;
+                    *phiBin = iphi;
+                    *max = d[iphi];
+                }
+        }
+    }
+
+    template<typename Real>
+    inline bool Grid2d<Real>::isCompatible(const Grid2d& g) const
+    {
+        return g.etaMin_ == etaMin_ &&
+            g.etaMax_ == etaMax_ &&
+            g.phiBin0Edge_ == phiBin0Edge_ &&
+            g.nEta_ == nEta_ &&
+            g.nPhi_ == nPhi_;
+    }
+
+    template<typename Real>
+    inline const Real* Grid2d<Real>::data() const
+    {
+        return data_;
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::uncheckedAt(const unsigned etaBin,
+                                          const unsigned phiBin) const
+    {
+        return data_[etaBin*nPhi_ + phiBin];
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::binValue(const unsigned etaBin,
+                                       const unsigned phiBin) const
+    {
+        assert(etaBin < nEta_);
+        assert(phiBin < nPhi_);
+        return data_[etaBin*nPhi_ + phiBin];
+    }
+
+    template<typename Real>
+    inline Real Grid2d<Real>::coordValue(const Real eta,
+                                         const Real phi) const
+    {
+        const int etaBin(getEtaBin(eta));
+        const unsigned phiBin(getPhiBin(phi));
+        assert(etaBin >= 0 && static_cast<unsigned>(etaBin) < nEta_);
+        return data_[static_cast<unsigned>(etaBin)*nPhi_ + phiBin];
+    }
+
+    template<typename Real>
+    inline void Grid2d<Real>::fillFast(
+        const Real eta, const Real phi, const Real weight)
+    {
+        const int ieta(getEtaBin(eta));
+        if (ieta < 0)
+            return;
+        const unsigned etaBin(ieta);
+        if (etaBin >= nEta_)
+            return;
+        data_[etaBin*nPhi_ + getPhiBin(phi)] += weight;
+    }
+
+    template<typename Real>
+    inline void Grid2d<Real>::setFast(
+        const Real eta, const Real phi, const Real value)
+    {
+        const int ieta(getEtaBin(eta));
+        if (ieta < 0)
+            return;
+        const unsigned etaBin(ieta);
+        if (etaBin >= nEta_)
+            return;
+        data_[etaBin*nPhi_ + getPhiBin(phi)] = value;
+    }
+
+    template<typename Real>
+    inline void Grid2d<Real>::fillBin(
+        const unsigned etaBin, const unsigned phiBin, const Real weight)
+    {
+        assert(etaBin < nEta_);
+        assert(phiBin < nPhi_);
+        data_[etaBin*nPhi_ + phiBin] += weight;
+    }
+    
+    template<typename Real>
+    inline void Grid2d<Real>::setBin(
+        const unsigned etaBin, const unsigned phiBin, const Real value)
+    {
+        assert(etaBin < nEta_);
+        assert(phiBin < nPhi_);
+        data_[etaBin*nPhi_ + phiBin] = value;
+    }
+    
+    template<typename Real>
+    inline void Grid2d<Real>::uncheckedFillBin(
+        const unsigned etaBin, const unsigned phiBin, const Real weight)
+    {
+        data_[etaBin*nPhi_ + phiBin] += weight;
+    }
+    
+    template<typename Real>
+    inline void Grid2d<Real>::uncheckedSetBin(
+        const unsigned etaBin, const unsigned phiBin, const Real value)
+    {
+        data_[etaBin*nPhi_ + phiBin] = value;
+    }
+
+    template<typename Real>
+    Grid2d<Real>::Grid2d(const unsigned nEtaBins, const Real etaMin,
+                         const Real etaMax, const unsigned nPhiBins,
+                         const Real phiBin0Edge, const char* title)
+        : data_(new Real[nEtaBins*nPhiBins]),
+          title_(title),
+          phiBinWidth_(2.0*M_PI/nPhiBins),
+          etaMin_(etaMin),
+          etaMax_(etaMax),
+          etaRange_(etaMax - etaMin),
+          phiBin0Edge_(phiBin0Edge),
+          nEta_(nEtaBins),
+          nPhi_(nPhiBins)
+    {
+        assert(nEtaBins);
+        assert(nPhiBins);
+        assert(etaRange_ > 0.0);
+        reset();
+    }
+
+    template<typename Real>
+    Grid2d<Real>::Grid2d(const Grid2d& g)
+        : data_(new Real[g.nEta_*g.nPhi_]),
+          title_(g.title_),
+          phiBinWidth_(g.phiBinWidth_),
+          etaMin_(g.etaMin_),
+          etaMax_(g.etaMax_),
+          etaRange_(g.etaRange_),
+          phiBin0Edge_(g.phiBin0Edge_),
+          nEta_(g.nEta_),
+          nPhi_(g.nPhi_)
+    {
+        const unsigned nbins = g.nEta_*g.nPhi_;
+        for (unsigned i=0; i<nbins; ++i)
+            data_[i] = g.data_[i];
+    }
+
+    template<typename Real>
+    Grid2d<Real>& Grid2d<Real>::operator=(const Grid2d& g)
+    {
+        if (this == &g)
+            return *this;
+        const bool remem = (nEta_*nPhi_ != g.nEta_*g.nPhi_);
+        phiBinWidth_ = g.phiBinWidth_;
+        etaMin_ = g.etaMin_;
+        etaMax_ = g.etaMax_;
+        etaRange_ = g.etaRange_;
+        phiBin0Edge_ = g.phiBin0Edge_;
+        nEta_ = g.nEta_;
+        nPhi_ = g.nPhi_;
+        title_ = g.title_;
+
+        if (remem)
+        {
+            delete [] data_;
+            data_ = new Real[g.nEta_*g.nPhi_];
+        }
+        const unsigned nbins = g.nEta_*g.nPhi_;
+        for (unsigned i=0; i<nbins; ++i)
+            data_[i] = g.data_[i];
+
+        return *this;
+    }
+
+    template<typename Real>
+    inline Grid2d<Real>::~Grid2d()
+    {
+        delete [] data_;
+    }
+
+    template<typename Real>
+    inline void Grid2d<Real>::setTitle(const char* newtitle)
+    {
+        title_ = newtitle;
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::blockSet(const Real *from, const unsigned nEtaFrom,
+                                const unsigned nPhiFrom)
+    {
+        assert(nEtaFrom == nEta_);
+        assert(nPhiFrom == nPhi_);
+        const unsigned n = nEta_*nPhi_;
+        for (unsigned i=0; i<n; ++i)
+            data_[i] = from[i];
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::blockFill(const Real *from, const unsigned nEtaFrom,
+                                 const unsigned nPhiFrom)
+    {
+        assert(nEtaFrom == nEta_);
+        assert(nPhiFrom == nPhi_);
+        const unsigned n = nEta_*nPhi_;
+        for (unsigned i=0; i<n; ++i)
+            data_[i] += from[i];
+    }
+
+    template<typename Real>
+    Grid2d<Real>& Grid2d<Real>::operator+=(const Grid2d& r)
+    {
+        assert(isCompatible(r));
+        const Real *from = r.data_;
+        const unsigned n = nEta_*nPhi_;
+        for (unsigned i=0; i<n; ++i)
+            data_[i] += from[i];
+        return *this;
+    }
+
+    template<typename Real>
+    Grid2d<Real>& Grid2d<Real>::operator-=(const Grid2d& r)
+    {
+        assert(isCompatible(r));
+        const Real *from = r.data_;
+        const unsigned n = nEta_*nPhi_;
+        for (unsigned i=0; i<n; ++i)
+            data_[i] -= from[i];
+        return *this;
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::reset(const Real v)
+    {
+        const unsigned n = nEta_*nPhi_;
+        for (unsigned i=0; i<n; ++i)
+            data_[i] = v;
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::scaleData(const Real v)
+    {
+        const unsigned n = nEta_*nPhi_;
+        for (unsigned i=0; i<n; ++i)
+            data_[i] *= v;
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::scaleData(const Real* scaleFactorArray,
+                                 const unsigned arrayLength)
+    {
+        assert(scaleFactorArray);
+        assert(arrayLength == nEta_);
+        for (unsigned ieta=0; ieta<nEta_; ++ieta)
+        {
+            Real* d = data_ + ieta*nPhi_;
+            const Real v = scaleFactorArray[ieta];
+            for (unsigned iphi=0; iphi<nPhi_; ++iphi)
+                d[iphi] *= v;
+        }
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::applyThreshold(const Real v)
+    {
+        const Real zero = static_cast<Real>(0);
+        const unsigned n = nEta_*nPhi_;
+        for (unsigned i=0; i<n; ++i)
+            if (data_[i] <= v)
+                data_[i] = zero;
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::power(const double alpha)
+    {
+        assert(alpha >= 0.0);
+        const Real zero = static_cast<Real>(0);
+        if (alpha == 1.0)
+            applyThreshold(zero);
+        else
+        {
+            const unsigned n = nEta_*nPhi_;
+            for (unsigned i=0; i<n; ++i)
+            {
+                if (data_[i] <= zero)
+                    data_[i] = zero;
+                else
+                    data_[i] = pow(static_cast<double>(data_[i]), alpha);
+            }
+        }
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::applyCoshThreshold(const Real v)
+    {
+        const Real zero = static_cast<Real>(0);
+        for (unsigned ieta=0; ieta<nEta_; ++ieta)
+        {
+            const Real cut = v/cosh(etaBinCenter(ieta));
+            Real* d = data_ + ieta*nPhi_;
+            for (unsigned iphi=0; iphi<nPhi_; ++iphi)
+                if (d[iphi] <= cut)
+                    d[iphi] = zero;
+        }
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::applyLogicalThreshold(const Real v)
+    {
+        const Real zero = static_cast<Real>(0);
+        const Real one = static_cast<Real>(1);
+        const unsigned n = nEta_*nPhi_;
+        for (unsigned i=0; i<n; ++i)
+        {
+            if (data_[i] <= v)
+                data_[i] = zero;
+            else
+                data_[i] = one;
+        }
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::clearEtaRange(const Real minEta,
+                                     const Real maxEta)
+    {
+        int iMin(getEtaBin(minEta));
+        if (iMin < 0)
+            iMin = 0;
+        int iMax(getEtaBin(maxEta));
+        if (iMax < 0)
+            return;
+        clearEtaBins(iMin, iMax);
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::clearEtaBins(const unsigned etaBinMin,
+                                     unsigned etaBinMax)
+    {
+        if (etaBinMax > nEta_)
+            etaBinMax = nEta_;
+        for (unsigned i=etaBinMin; i<etaBinMax; ++i)
+        {
+            Real *d = data_ + i*nPhi_;
+            for (unsigned j=0; j<nPhi_; ++j)
+                d[j] = 0;
+        }
+    }
+
+    template<typename Real>
+    Real Grid2d<Real>::sum() const
+    {
+        long double sum = 0.0L;
+        const unsigned nbins = nEta_*nPhi_;
+        for (unsigned i=0; i<nbins; ++i)
+            sum += data_[i];
+        return static_cast<Real>(sum);
+    }
+
+    template<typename Real>
+    Real Grid2d<Real>::integral() const
+    {
+        return sum()*etaBinWidth()*phiBinWidth_;
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::accumulateDataStats(StatAccumulator* acc) const
+    {
+        const unsigned nbins = nEta_*nPhi_;
+        for (unsigned i=0; i<nbins; ++i)
+            acc->accumulate(data_[i]);
+    }
+
+    template<typename Real>
+    unsigned Grid2d<Real>::countAboveThreshold(const Real threshold) const
+    {
+        unsigned cnt = 0;
+        const unsigned nbins = nEta_*nPhi_;
+        for (unsigned i=0; i<nbins; ++i)
+            if (data_[i] > threshold)
+                ++cnt;
+        return cnt;
+    }
+
+    template<typename Real>
+    Real Grid2d<Real>::integralAboveThreshold(const Real threshold) const
+    {
+        long double sum = 0.0L;
+        const unsigned nbins = nEta_*nPhi_;
+        for (unsigned i=0; i<nbins; ++i)
+            if (data_[i] > threshold)
+                sum += data_[i];
+        return static_cast<Real>(sum)*etaBinWidth()*phiBinWidth_;
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::fuzzyIntegral(const Real threshold,
+                                     Real *value, Real *uncertainty) const
+    {
+        assert(value);
+        assert(uncertainty);
+
+        const Real zero = static_cast<Real>(0);
+        assert(threshold >= zero);
+
+        if (threshold == zero)
+        {
+            assert(isNonNegative());
+            *value = integral();
+            *uncertainty = zero;
+        }
+        else
+        {
+            long double sum = 0.0L;
+            long double sumsq = 0.0L;
+            const unsigned nbins = nEta_*nPhi_;
+            for (unsigned i=0; i<nbins; ++i)
+            {
+                assert(data_[i] >= zero);
+                const Real norm = data_[i] + threshold;
+                const Real w1 = data_[i]/norm;
+                const Real w2 = threshold/norm;
+                sum += data_[i]*w1;
+                sumsq += data_[i]*data_[i]*w1*w2;
+            }
+            const Real binArea = etaBinWidth()*phiBinWidth_;
+            *value = static_cast<Real>(sum)*binArea;
+            *uncertainty = static_cast<Real>(sqrtl(sumsq))*binArea;
+        }
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::fillTwo(const unsigned etaBin,
+                               const Real phi, const Real weight)
+    {
+        const unsigned phiBin(getPhiBin(phi));
+        const Real phiBinCenter(phiFromBinNum(phiBin));
+        const Real pi = static_cast<Real>(M_PI);
+        const Real twopi = static_cast<Real>(2.0*M_PI);
+        Real dphi(phi - phiBinCenter);
+        while (dphi > pi)
+            dphi -= twopi;
+        while (dphi < -pi)
+            dphi += twopi;
+        dphi /= phiBinWidth_;
+
+        for (unsigned iphi=0; iphi<3U; ++iphi)
+        {
+            const double over = intervalOverlap(
+                dphi - 0.5, dphi + 0.5, iphi - 1.5, iphi - 0.5);
+            data_[etaBin*nPhi_ + (phiBin+iphi+nPhi_-1)%nPhi_] +=
+                static_cast<Real>(over)*weight;
+        }    
+    }
+
+    template<typename Real>
+    void Grid2d<Real>::fill(const Real eta, const Real phi,
+                            const Real weight)
+    {
+        const int etaTemp(getEtaBin(eta));
+        if (etaTemp < 0)
+            return;
+        const unsigned etaBin(etaTemp);
+        if (etaBin >= nEta_)
+            return;
+        if (etaBin == 0 || etaBin == nEta_ - 1)
+        {
+            // Avoid biasing the distributions towards eta = 0.
+            // Fill the centers of the first and the last bins.
+            fillTwo(etaBin, phi, weight);
+            return;
+        }
+
+        // There must be a faster way to calculate all the rest
+        // of this algorithm. What is done below is the following:
+        // a rectangle is considered centered at the given eta and phi
+        // and with the sides equal to grid bin widths along the
+        // corresponding axes. Then the area of the overlap of
+        // this rectangle is computed with the nearby grid bins.
+        // The weight is distrubuted among those grid bins with
+        // which the overlap is non-zero, in proportion to
+        // the overlap area.
+        //
+        // In principle, the best thing to do would be to distribute
+        // the weight among even larger number of bins and then apply
+        // the inverse filter (by deconvolution) at the clustering stage.
+        // This, however, would result in quite significant CPU time
+        // increase to fill the grid.
+        //
+        const Real deta((eta - etaBinCenter(etaBin))*nEta_/etaRange_);
+        const double detaMin = deta - 0.5;
+        const double detaMax = deta + 0.5;
+
+        const unsigned phiBin(getPhiBin(phi));
+        const Real phiBinCenter(phiFromBinNum(phiBin));
+        const Real pi = static_cast<Real>(M_PI);
+        const Real twopi = static_cast<Real>(2.0*M_PI);
+        Real dphi(phi - phiBinCenter);
+        while (dphi > pi)
+            dphi -= twopi;
+        while (dphi < -pi)
+            dphi += twopi;
+        dphi /= phiBinWidth_;
+        const double dphiMin = dphi - 0.5;
+        const double dphiMax = dphi + 0.5;
+
+        for (unsigned ieta=0; ieta<3U; ++ieta)
+            for (unsigned iphi=0; iphi<3U; ++iphi)
+            {
+                const double over = rectangleRectangleOverlap(
+                    detaMin, dphiMin, detaMax, dphiMax,
+                    ieta - 1.5, iphi - 1.5, ieta - 0.5, iphi - 0.5);
+                data_[(etaBin+ieta-1)*nPhi_ + (phiBin+iphi+nPhi_-1)%nPhi_] +=
+                    static_cast<Real>(over)*weight;
+            }    
+    }
+
+    template<typename Real>
+    bool Grid2d<Real>::write(std::ostream& of) const
+    {
+        // Write order:
+        //
+        // total length (not including this word)  -- unsigned
+        // class id                                -- unsigned
+        // version #                               -- unsigned
+        // endianity identification word           -- unsigned
+        //
+        // everything else in a convenient order
+        //
+        const long plen = of.tellp();
+        unsigned u = 0;
+        write_pod(of, u);
+
+        const long objstart = of.tellp();
+        u = classId();
+        write_pod(of, u);
+
+        u = version();
+        write_pod(of, u);
+
+        // Write endianity id word
+        u = 0x01020304U;
+        write_pod(of, u);
+
+        u = strlen(title_.c_str());
+        write_pod(of, u);
+        write_pod_array(of, title_.c_str(), u);
+
+        write_pod(of, etaMin_);
+        write_pod(of, etaMax_);
+        write_pod(of, phiBin0Edge_);
+        write_pod(of, nEta_);
+        write_pod(of, nPhi_);
+        write_pod_array(of, data_, nEta_*nPhi_);
+
+        const long here = of.tellp();
+        of.seekp(plen);
+        u = here - objstart;
+        write_pod(of, u);
+        of.seekp(here);
+
+        return !of.bad() && !of.fail();        
+    }
+
+    template<typename Real>
+    Grid2d<Real>* Grid2d<Real>::read(std::istream& in)
+    {
+        unsigned len;
+        read_pod(in, &len);
+
+        const long objstart = in.tellg();
+        unsigned u;
+        read_pod(in, &u);
+        if (u != classId())
+            return 0;
+
+        read_pod(in, &u);
+        if (u != version())
+            return 0;
+
+        read_pod(in, &u);
+        if (u != 0x01020304U)
+            return 0;
+
+        read_pod(in, &u);
+        char* title = new char[u+1];
+        read_pod_array(in, title, u);
+        title[u] = '\0';
+
+        Real etaMin;
+        Real etaMax;
+        Real phiBin0Edge;
+        unsigned nEta;
+        unsigned nPhi;
+
+        read_pod(in, &etaMin);
+        read_pod(in, &etaMax);
+        read_pod(in, &phiBin0Edge);
+        read_pod(in, &nEta);
+        read_pod(in, &nPhi);
+
+        Grid2d<Real>* grid = new Grid2d<Real>(nEta, etaMin, etaMax,
+                                              nPhi, phiBin0Edge, title);
+        delete [] title;
+        read_pod_array(in, const_cast<Real*>(grid->data()), nEta*nPhi);
+
+        // Check that the record length is correct
+        const long here = in.tellg();
+        u = here - objstart;
+        if (!in.bad() && !in.fail() && len == u)
+            return grid;
+        else
+        {
+            delete grid;
+            return 0;
+        }
+    }
+}

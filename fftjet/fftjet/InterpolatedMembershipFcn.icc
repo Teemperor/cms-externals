@@ -1,0 +1,406 @@
+#include <cassert>
+#include <algorithm>
+
+#include "fftjet/interpolate.hh"
+#include "fftjet/binaryIO.hh"
+
+namespace fftjet {
+    template<typename Real>
+    InterpolatedMembershipFcn<Real>::InterpolatedMembershipFcn(
+            const std::vector<double>& scales,
+            const bool useLogSpaceForScale,
+            const Real energyFractionToIgnore,
+            const unsigned nEtaBins, const Real etaMin, const Real etaMax,
+            const unsigned nPhiBins, const Real phiBin0Edge,
+            const unsigned nEnergyBins,
+            const Real energyMin, const Real energyMax)
+        : scales_(scales),
+          ignoredFraction_(energyFractionToIgnore),
+          etaMin_(etaMin),
+          etaMax_(etaMax),
+          phiBin0Edge_(phiBin0Edge),
+          energyMin_(energyMin),
+          energyMax_(energyMax),
+          nEta_(nEtaBins),
+          nPhi_(nPhiBins),
+          nEnergy_(nEnergyBins),
+          useLogSpace_(useLogSpaceForScale),
+          ready_(false)
+    {
+        const unsigned nscales = scales_.size();
+        assert(nscales);
+        interpols_.reserve(nscales);
+
+        for (unsigned i=0; i<nscales; ++i)
+        {
+            // Check that the scales are reasonable
+            assert(scales_[i] > 0.0);
+            if (i)
+                assert(scales_[i-1] < scales_[i]);
+            interpols_.push_back(0);
+        }
+    }
+
+    template<typename Real>
+    InterpolatedMembershipFcn<Real>::~InterpolatedMembershipFcn()
+    {
+        const unsigned n = interpols_.size();
+        for (unsigned i=0; i<n; ++i)
+            delete interpols_[i];
+    }
+
+    template<typename Real>
+    inline unsigned InterpolatedMembershipFcn<Real>::nEta() const
+    {
+        return nEta_;
+    }
+
+    template<typename Real>
+    inline unsigned InterpolatedMembershipFcn<Real>::nPhi() const
+    {
+        return nPhi_;
+    }
+    template<typename Real>
+    inline unsigned InterpolatedMembershipFcn<Real>::nEnergy() const
+    {
+        return nEnergy_;
+    }
+
+    template<typename Real>
+    inline Real InterpolatedMembershipFcn<Real>::ignoredFraction() const
+    {
+        return ignoredFraction_;
+    }
+
+    template<typename Real>
+    inline Real InterpolatedMembershipFcn<Real>::etaMin() const
+    {
+        return etaMin_;
+    }
+    template<typename Real>
+    inline Real InterpolatedMembershipFcn<Real>::etaMax() const
+    {
+        return etaMax_;
+    }
+
+    template<typename Real>
+    inline Real InterpolatedMembershipFcn<Real>::phiBin0Edge() const
+    {
+        return phiBin0Edge_;
+    }
+
+    template<typename Real>
+    inline Real InterpolatedMembershipFcn<Real>::energyMin() const
+    {
+        return energyMin_;
+    }
+    template<typename Real>
+    inline Real InterpolatedMembershipFcn<Real>::energyMax() const
+    {
+        return energyMax_;
+    }
+
+    template<typename Real>
+    inline bool InterpolatedMembershipFcn<Real>::usesLogSpace() const
+    {
+        return useLogSpace_;
+    }
+
+    template<typename Real>
+    inline const std::vector<double>&
+    InterpolatedMembershipFcn<Real>::scales() const
+    {
+        return scales_;
+    }
+
+    template <typename Real>
+    template <typename InputReal>
+    void InterpolatedMembershipFcn<Real>::setScaleData(
+        const unsigned scaleBin, const InputReal* const data,
+        const double scaleFactor)
+    {
+        delete interpols_.at(scaleBin);
+        interpols_[scaleBin] = new EtaPhiEtInterpolator<Real>(
+            data, ignoredFraction_, nEta_, etaMin_, etaMax_,
+            nPhi_, phiBin0Edge_, nEnergy_, energyMin_, energyMax_);
+        if (scaleFactor != 1.0)
+            interpols_[scaleBin]->scaleData(scaleFactor);
+
+        const unsigned nscales = interpols_.size();
+        ready_ = true;
+        for (unsigned i=0; i<nscales; ++i)
+            if (interpols_[i] == 0)
+            {
+                ready_ = false;
+                break;
+            }
+    }
+
+    template <typename Real>
+    double InterpolatedMembershipFcn<Real>::operator()(
+        const double eta, const double phi,
+        const double et, const double scale) const
+    {
+        assert(ready_);
+        assert(scale > 0.0);
+        const unsigned nscales = scales_.size();
+        const unsigned lb = std::lower_bound(scales_.begin(),
+                                             scales_.end(), scale) -
+                            scales_.begin();
+        if (lb == 0)
+            return (*interpols_[0])(eta, phi, et);
+        else if (lb == nscales)
+            return (*interpols_[nscales-1])(eta, phi, et);
+        else
+        {
+            const unsigned lbm1(lb - 1);
+            const double loval = (*interpols_[lbm1])(eta, phi, et);
+            const double hival = (*interpols_[lb])(eta, phi, et);
+            if (useLogSpace_)
+                return log_interpolate_1d(scales_[lbm1], scales_[lb],
+                                          loval, hival, scale);
+            else
+                return lin_interpolate_1d(scales_[lbm1], scales_[lb],
+                                          loval, hival, scale);
+        }
+    }
+
+    template <typename Real>
+    inline Real InterpolatedMembershipFcn<Real>::totalEnergy(
+        const unsigned scaleBin) const
+    {
+        assert(interpols_.at(scaleBin));
+        return interpols_[scaleBin]->totalEnergy();
+    }
+
+    template <typename Real>
+    inline Real InterpolatedMembershipFcn<Real>::multiplicity(
+        const unsigned scaleBin) const
+    {
+        assert(interpols_.at(scaleBin));
+        return interpols_[scaleBin]->multiplicity();
+    }
+
+    template <typename Real>
+    double InterpolatedMembershipFcn<Real>::absorbableEnergy(
+        const double eta, const double phi, const double scale) const
+    {
+        assert(ready_);
+        assert(scale > 0.0);
+        const unsigned nscales = scales_.size();
+        const unsigned lb = std::lower_bound(scales_.begin(),
+                                             scales_.end(), scale) -
+                            scales_.begin();
+        if (lb == 0)
+            return interpols_[0]->maxNon0Energy(eta, phi);
+        else if (lb == nscales)
+            return interpols_[nscales-1]->maxNon0Energy(eta, phi);
+        else
+        {
+            const unsigned lbm1(lb - 1);
+            const double loval = interpols_[lbm1]->maxNon0Energy(eta, phi);
+            const double hival = interpols_[lb]->maxNon0Energy(eta, phi);
+            if (useLogSpace_)
+                return log_interpolate_1d(scales_[lbm1], scales_[lb],
+                                          loval, hival, scale);
+            else
+                return lin_interpolate_1d(scales_[lbm1], scales_[lb],
+                                          loval, hival, scale);
+        }
+    }
+
+    template<typename Real>
+    void InterpolatedMembershipFcn<Real>::setScale(
+        const unsigned scaleBin, EtaPhiEtInterpolator<Real>* interp)
+    {
+        assert(interp);
+        assert(interpols_.at(scaleBin) == 0);
+        interpols_[scaleBin] = interp;
+
+        const unsigned nscales = interpols_.size();
+        ready_ = true;
+        for (unsigned i=0; i<nscales; ++i)
+            if (interpols_[i] == 0)
+            {
+                ready_ = false;
+                break;
+            }
+    }
+
+    template<typename Real>
+    bool InterpolatedMembershipFcn<Real>::operator==(
+        const InterpolatedMembershipFcn<Real>& r) const
+    {
+        if (!(scales_ == r.scales_ &&
+              ignoredFraction_ == r.ignoredFraction_ &&
+              etaMin_ == r.etaMin_ &&
+              etaMax_ == r.etaMax_ &&
+              phiBin0Edge_ == r.phiBin0Edge_ &&
+              energyMin_ == r.energyMin_ &&
+              energyMax_ == r.energyMax_ &&
+              nEta_ == r.nEta_ &&
+              nPhi_ == r.nPhi_ &&
+              nEnergy_ == r.nEnergy_ &&
+              useLogSpace_ == r.useLogSpace_ &&
+              ready_ == r.ready_))
+            return false;
+
+        const unsigned nscales = interpols_.size();
+        assert(nscales == scales_.size());
+        assert(r.interpols_.size() == nscales);
+        for (unsigned i=0; i<nscales; ++i)
+        {
+            if (interpols_[i] == 0 && r.interpols_[i] == 0)
+                ;
+            else if (interpols_[i] && r.interpols_[i])
+            {
+                if (*interpols_[i] != *r.interpols_[i])
+                    return false;
+            }
+            else
+                return false;
+        }
+
+        return true;
+    }
+
+    template<typename Real>
+    bool InterpolatedMembershipFcn<Real>::write(std::ostream& of) const
+    {
+        // Write order:
+        //
+        // total length (not including this word)  -- unsigned
+        // class id                                -- unsigned
+        // version #                               -- unsigned
+        // endianity identification word           -- unsigned
+        //
+        // everything else in a convenient order
+        //
+        const long plen = of.tellp();
+        unsigned u = 0;
+        write_pod(of, u);
+
+        const long objstart = of.tellp();
+        u = classId();
+        write_pod(of, u);
+
+        u = version();
+        write_pod(of, u);
+
+        // Write endianity id word
+        u = 0x01020304U;
+        write_pod(of, u);
+
+        u = scales_.size();
+        write_pod(of, u);
+        write_pod_array(of, &scales_[0], u);
+
+        write_pod(of, ignoredFraction_);
+        write_pod(of, etaMin_);
+        write_pod(of, etaMax_);
+        write_pod(of, phiBin0Edge_);
+        write_pod(of, energyMin_);
+        write_pod(of, energyMax_);
+        write_pod(of, nEta_);
+        write_pod(of, nPhi_);
+        write_pod(of, nEnergy_);
+        write_pod(of, useLogSpace_);
+
+        assert(u == interpols_.size());
+        for (unsigned i=0; i<u; ++i)
+        {
+            bool filled = interpols_[i];
+            write_pod(of, filled);
+            if (filled)
+                if (!interpols_[i]->write(of))
+                    return false;
+        }
+
+        const long here = of.tellp();
+        of.seekp(plen);
+        u = here - objstart;
+        write_pod(of, u);
+        of.seekp(here);
+
+        return !of.bad() && !of.fail();
+    }
+
+    template<typename Real>
+    InterpolatedMembershipFcn<Real>* InterpolatedMembershipFcn<Real>::read(
+        std::istream& in)
+    {
+        unsigned len;
+        read_pod(in, &len);
+
+        const long objstart = in.tellg();
+        unsigned u;
+        read_pod(in, &u);
+        if (u != classId())
+            return 0;
+
+        read_pod(in, &u);
+        if (u != version())
+            return 0;
+
+        read_pod(in, &u);
+        if (u != 0x01020304U)
+            return 0;
+
+        read_pod(in, &u);
+        std::vector<double> scales;
+        scales.reserve(u);
+        for (unsigned i=0; i<u; ++i)
+        {
+            double d;
+            read_pod(in, &d);
+            scales.push_back(d);
+        }
+
+        Real ignoredFraction;
+        Real etaMin;
+        Real etaMax;
+        Real phiBin0Edge;
+        Real energyMin;
+        Real energyMax;
+        unsigned nEta;
+        unsigned nPhi;
+        unsigned nEnergy;
+        bool useLogSpace;
+
+        read_pod(in, &ignoredFraction);
+        read_pod(in, &etaMin);
+        read_pod(in, &etaMax);
+        read_pod(in, &phiBin0Edge);
+        read_pod(in, &energyMin);
+        read_pod(in, &energyMax);
+        read_pod(in, &nEta);
+        read_pod(in, &nPhi);
+        read_pod(in, &nEnergy);
+        read_pod(in, &useLogSpace);
+
+        InterpolatedMembershipFcn<Real>* memF = 0;
+        if (in.good())
+        {
+            memF = new InterpolatedMembershipFcn<Real>(
+                scales, useLogSpace, ignoredFraction, nEta, etaMin, etaMax,
+                nPhi, phiBin0Edge, nEnergy, energyMin, energyMax);
+            for (unsigned i=0; i<u; ++i)
+            {
+                bool filled;
+                read_pod(in, &filled);
+                if (filled)
+                    memF->setScale(i, EtaPhiEtInterpolator<Real>::read(in));
+            }
+        }
+
+        // Check that the record length is correct
+        const long here = in.tellg();
+        u = here - objstart;
+        if (in.bad() || in.fail() || len != u)
+        {
+            delete memF;
+            memF = 0;
+        }
+        return memF;
+    }
+}

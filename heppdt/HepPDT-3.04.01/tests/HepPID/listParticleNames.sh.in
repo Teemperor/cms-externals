@@ -1,0 +1,14 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f listParticleNames.out
+
+./listParticleNames@EXEEXT@ 
+
+cmd=`@DIFF_Q@ listParticleNames.out @srcdir@/listParticleNames.output`
+
+if [ -n "$cmd" ]; then
+  echo "listParticleNames.out and @srcdir@/listParticleNames.output differ"
+  exit 1;
+fi
+

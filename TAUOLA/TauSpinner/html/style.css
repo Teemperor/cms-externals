@@ -1,0 +1,39 @@
+a:link {color: #333399; text-decoration: underline; font-weight: bold; }
+a:active {color: #666666; text-decoration: underline; font-weight: bold; }
+a:visited {color: #666666; text-decoration: underline; font-weight: bold; }
+a:hover {color: #666666; text-decoration: none; font-weight: bold; }
+
+BODY { 
+background-color: #bab9b9; 
+} 
+
+TABLE.up {
+background-color: #6b7f91;
+border-bottom: 1px solid #464847;
+}
+
+TABLE.info {
+margin: 5px;
+}
+
+TABLE.down {
+background-color: #6b7f91;
+border-top: 1px solid #464847;
+}
+
+p {
+font-family: Arial;
+font-size: 20px;
+padding: 5px 0 1px 0;
+color: #666666;
+border-bottom: 1px solid #666666;
+margin-bottom: 2px;
+}
+
+text {
+font-family: Arial;
+font-size: 18px;
+color: #444444;
+}
+
+<!-- Initial design by Tomasz Paluch -->

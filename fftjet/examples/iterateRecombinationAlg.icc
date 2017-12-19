@@ -1,0 +1,135 @@
+#include <cfloat>
+#include <cmath>
+#include <cassert>
+
+template<typename VectorLike>
+static void iterateRecombinationAlg_updatePreclusters(
+    const fftjet::AbsJetCorrector<fftjet::RecombinedJet<VectorLike> >& corrector,
+    const std::vector<fftjet::RecombinedJet<VectorLike> >& jets,
+    std::vector<fftjet::Peak>* peaks)
+{
+    peaks->clear();
+    const unsigned njets = jets.size();
+    peaks->reserve(njets);
+
+    for (unsigned i=0; i<njets; ++i)
+    {
+        const fftjet::RecombinedJet<VectorLike>& jet(jets[i]);
+        fftjet::Peak p(jet.precluster());
+        p.setEtaPhi(jet.vec().eta(), jet.vec().phi());
+        const double ptGuess = corrector(jet.magnitude(), jet);
+        if (ptGuess > 1.0/FLT_MAX)
+            p.setRecoScale(1.0/ptGuess);
+        else
+            p.setRecoScale(FLT_MAX);
+        peaks->push_back(p);
+    }
+}
+
+template<typename VectorLike>
+static double iterateRecombinationAlg_estimateConvergenceDistance(
+    const double etaToPhiBandwidthRatio, const double relativePtBandwidth,
+    const std::vector<fftjet::RecombinedJet<VectorLike> >& j1,
+    std::vector<fftjet::RecombinedJet<VectorLike> >& j2)
+{
+    const unsigned njets = j1.size();
+    if (njets != j2.size())
+        return FLT_MAX;
+
+    const double bwEta = sqrt(etaToPhiBandwidthRatio);
+    const double bwPhi = 1.0/bwEta;
+
+    double distance = 0.0;
+    for (unsigned i=0; i<njets; ++i)
+    {
+        const double deta = (j1[i].vec().eta() - j2[i].vec().eta())/bwEta;
+        double dphi = j1[i].vec().phi() - j2[i].vec().phi();
+        if (dphi > M_PI)
+            dphi -= (2.0*M_PI);
+        else if (dphi < -M_PI)
+            dphi += (2.0*M_PI);
+        dphi /= bwPhi;
+        const double mag1 = j1[i].magnitude();
+        const double mag2 = j2[i].magnitude();
+        double dmag = 0.0;
+        if (mag1 > 0.0 || mag2 > 0.0)
+            dmag = 2.0*(mag1 - mag2)/(mag1 + mag2)/relativePtBandwidth;
+        const double delta = deta*deta + dphi*dphi + dmag*dmag;
+        j2[i].setConvergenceDistance(delta);
+        distance += delta;
+    }
+
+    if (njets)
+        distance /= njets;
+
+    return distance;
+}
+
+template<typename Real, typename VectorLike, typename BgData>
+int iterateRecombinationAlg(
+    fftjet::AbsRecombinationAlg<Real,VectorLike,BgData>& recoAlg,
+    const std::vector<fftjet::Peak>& initialPreclusters,
+    const fftjet::Grid2d<Real>& eventData,
+    const BgData* bgData, const unsigned nBgEta, const unsigned nBgPhi,
+    const fftjet::AbsJetCorrector<fftjet::RecombinedJet<VectorLike> >& corrector,
+    const unsigned maxIterations, const double etaToPhiBandwidthRatio,
+    const double relativePtBandwidth, const double convergedDistanceSquared,
+    std::vector<fftjet::RecombinedJet<VectorLike> >* jets,
+    VectorLike* unclustered, double* unused, unsigned* iterationsPerformed,
+    double* finalSquaredDistance)
+{
+    assert(etaToPhiBandwidthRatio > 0.0);
+    assert(relativePtBandwidth > 0.0);
+    assert(iterationsPerformed);
+    assert(finalSquaredDistance);
+
+    *iterationsPerformed = 0;
+    *finalSquaredDistance = -1.0;
+
+    // Run the algorithm once
+    int status = recoAlg.run(initialPreclusters, eventData,
+                             bgData, nBgEta, nBgPhi,
+                             jets, unclustered, unused);
+    if (status == 0)
+        ++*iterationsPerformed;
+
+    if (maxIterations < 2 || status)
+        // No need to iterate
+        return status;
+
+    // Here, we do need to iterate. In order to figure out the
+    // convergence, we need to keep two sets of jets: the current
+    // set and the one obtained during the previous iteration.
+    std::vector<fftjet::RecombinedJet<VectorLike> > iterJets[2];
+    unsigned lastFilled = 0;
+    iterJets[lastFilled] = *jets;
+
+    std::vector<fftjet::Peak> preclusters;
+    VectorLike unclus;
+    double unus;
+
+    for (unsigned iter=1; iter<maxIterations && !status; ++iter)
+    {
+        iterateRecombinationAlg_updatePreclusters(
+            corrector, iterJets[lastFilled], &preclusters);
+        status = recoAlg.run(preclusters, eventData,
+                             bgData, nBgEta, nBgPhi,
+                             &iterJets[iter % 2], &unclus, &unus);
+        if (status == 0)
+        {
+            *unclustered = unclus;
+            *unused = unus;
+            lastFilled = iter % 2;
+            ++*iterationsPerformed;
+            *finalSquaredDistance = 
+                iterateRecombinationAlg_estimateConvergenceDistance(
+                    etaToPhiBandwidthRatio, relativePtBandwidth,
+                    iterJets[1U - lastFilled], iterJets[lastFilled]);
+            if (*finalSquaredDistance < convergedDistanceSquared)
+                break;
+        }
+    }
+
+    *jets = iterJets[lastFilled];
+    return status;
+}

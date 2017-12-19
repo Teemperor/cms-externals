@@ -1,0 +1,193 @@
+#include <cassert>
+#include <cmath>
+
+namespace fftjet {
+    template<typename Real>
+    long double AbsKernel2d::fillFFTy_(Real* to,
+                                       const unsigned nx, const unsigned ny,
+                                       const double x,
+                                       const double scale) const
+    {
+        const double dy = 2.0*M_PI/ny;
+        const double dx = 2.0*M_PI/nx;
+
+        double fval = rectangleAverage(x, 0.0, scale, dx, dy);
+        long double sum = fval;
+        to[0] = fval;
+        unsigned ipos = 0, ineg = ny;
+
+        while (1)
+        {
+            if (++ipos == ineg)
+                break;
+            fval = rectangleAverage(x, ipos*dy, scale, dx, dy);
+            sum += fval;
+            to[ipos] = fval;
+            if (--ineg == ipos)
+                break;
+            fval = rectangleAverage(x, -dy*ipos, scale, dx, dy);
+            sum += fval;
+            to[ineg] = fval;
+        }
+
+        return sum;
+    }
+
+    template<typename Real>
+    double AbsKernel2d::scanFFT(
+        Real* to, const unsigned nx, const unsigned ny,
+        const double scale, const double normArea,
+        const bool normalize) const
+    {
+        assert(to);
+        assert(nx);
+        assert(ny);
+        assert(scale > 0.0);
+
+        long double sum = fillFFTy_(to, nx, ny, 0.0, scale);
+        unsigned ipos = 0, ineg = nx;
+        const double dx = 2.0*M_PI/nx;
+
+        while (1)
+        {
+            if (++ipos == ineg)
+                break;
+            sum += fillFFTy_(to+ipos*ny, nx, ny, dx*ipos, scale);
+            if (--ineg == ipos)
+                break;
+            sum += fillFFTy_(to+ineg*ny, nx, ny, -dx*ipos, scale);
+        }
+        const double areaUnderTheScan = sum*(dx*2.0*M_PI/ny);
+
+        if (normalize)
+        {
+            assert(areaUnderTheScan);
+            const Real norm = normArea/areaUnderTheScan;
+            const unsigned n = nx*ny;
+            for (unsigned i=0; i<n; ++i)
+                to[i] *= norm;
+        }
+
+        return areaUnderTheScan;
+    }
+
+    template<typename Real>
+    double AbsKernel2d::scanPlane(
+        Real* to, const unsigned nx, const unsigned ny,
+        const double x0, const double y0, const double scale,
+        const double xmin, const double xmax,
+        const double ymin, const double ymax,
+        const double normArea,
+        const bool renormalize) const
+    {
+        assert(to);
+        assert(nx);
+        assert(ny);
+        assert(scale > 0.0);
+
+        unsigned nxmin, nxmax, nymin, nymax;
+        if (optimalPlaneScan(nx, ny, x0, y0, scale,
+                             xmin, xmax, ymin, ymax,
+                             &nxmin, &nxmax, &nymin, &nymax))
+        {
+            const unsigned nbins = nx*ny;
+            for (unsigned i=0; i<nbins; ++i)
+                to[i] = 0;
+        }
+
+        const double xstep = (xmax - xmin)/nx;
+        const double ystep = (ymax - ymin)/ny;
+
+        long double sum = 0.0L;
+        for (unsigned ix=nxmin; ix<nxmax; ++ix)
+        {
+            const double dx = xmin + (ix + 0.5)*xstep - x0;
+            Real* data = to + ix*ny;
+            for (unsigned iy=nymin; iy<nymax; ++iy)
+            {
+                const double dy = ymin + (iy + 0.5)*ystep - y0;
+                const double fval = rectangleAverage(
+                    dx, dy, scale, xstep, ystep);
+                sum += fval;
+                data[iy] = fval;
+            }
+        }
+
+        const double scanArea = static_cast<double>(sum)*xstep*ystep;
+        if (renormalize)
+        {
+            assert(scanArea);
+            const Real norm = normArea/scanArea;
+            for (unsigned ix=nxmin; ix<nxmax; ++ix)
+            {
+                Real* data = to + ix*ny;
+                for (unsigned iy=nymin; iy<nymax; ++iy)
+                    data[iy] *= norm;
+            }
+        }
+
+        return scanArea;
+    }
+
+    template<typename Real>
+    double AbsKernel2d::scanCylinder(
+        Real* to, const unsigned nEta, const unsigned nPhi,
+        const double eta0, const double phi0, const double scale,
+        const double etaMin, const double etaMax,
+        const double phiBin0Edge, const double normArea, 
+        const bool renormalize) const
+    {
+        assert(to);
+        assert(nEta);
+        assert(nPhi);
+        assert(scale > 0.0);
+
+        unsigned netaMin, netaMax, nphiMin, nphiMax;
+        if (optimalCylinderScan(nEta, nPhi, eta0, phi0, scale,
+                                etaMin, etaMax, phiBin0Edge,
+                                &netaMin, &netaMax, &nphiMin, &nphiMax))
+        {
+            const unsigned nbins = nEta*nPhi;
+            for (unsigned i=0; i<nbins; ++i)
+                to[i] = 0;            
+        }
+
+        const double etaStep = (etaMax - etaMin)/nEta;
+        const double phiStep = (2.0*M_PI)/nPhi;
+
+        long double sum = 0.0L;
+        for (unsigned ieta=netaMin; ieta<netaMax; ++ieta)
+        {
+            const double deta = etaMin + (ieta + 0.5)*etaStep - eta0;
+            Real* data = to + ieta*nPhi;
+            for (unsigned iphi=nphiMin; iphi<nphiMax; ++iphi)
+            {
+                const unsigned ib(iphi % nPhi);
+                double dphi = phiBin0Edge + (ib + 0.5)*phiStep - phi0;
+                while (dphi > M_PI)
+                    dphi -= (2.0*M_PI);
+                while (dphi < -M_PI)
+                    dphi += (2.0*M_PI);
+                const double fval = rectangleAverage(
+                    deta, dphi, scale, etaStep, phiStep);
+                sum += fval;
+                data[ib] = fval;
+            }
+        }
+
+        const double scanArea = static_cast<double>(sum)*etaStep*phiStep;
+        if (renormalize)
+        {
+            assert(scanArea);
+            const Real norm = normArea/scanArea;
+            for (unsigned ieta=netaMin; ieta<netaMax; ++ieta)
+            {
+                Real* data = to + ieta*nPhi;
+                for (unsigned iphi=nphiMin; iphi<nphiMax; ++iphi)
+                    data[iphi % nPhi] *= norm;
+            }
+        }
+
+        return scanArea;
+    }
+}

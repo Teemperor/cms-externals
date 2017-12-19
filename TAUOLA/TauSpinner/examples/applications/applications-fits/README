@@ -1,0 +1,40 @@
+#########################################
+# Running applications-fits.exe         #
+#########################################
+
+This program adding fits to the histograms stored in root-files generated
+by 'applications-plots.exe' located in 'applications' directory.
+
+Compile: make
+     or: make applications-fits/applications-fits.exe
+
+Run:     ./applications-fits.exe <config_file>
+
+List of assumptions made by this program:
+
+1) Subdirectory provided in config file already exists
+   (default directory name is 'applications-plots-and-paper')
+   All plots and .txt files will be stored in this subdirectory
+2) Names of the input files can be set in applications-fits.conf
+
+Input files:
+------------
+Histograms are separated into three categories: events from Z boson,
+W boson and events from analysis of Higgs-like polarization.
+The program can process several files at a time containing histograms
+from any of the above categories. They don't have to contain all three
+categories. The category is determined by the content (see README
+in 'applications' for histogram naming convention).
+
+If two or more files contain histograms from the same category,
+the result will be overwritten and only the result from last processed
+file will be stored.
+
+List of files to be processed, output directory and fitting ranges are
+controlled by a configuration file. An example configuration file
+'applications-fits.conf' is provided. Three example
+input files, with all three categories separated, are provided as well.
+They can be used to redo the plots of the publication.
+
+--
+Last modified: T. Przedzinski 9.I.2014

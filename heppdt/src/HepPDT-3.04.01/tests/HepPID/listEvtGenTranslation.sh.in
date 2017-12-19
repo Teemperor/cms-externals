@@ -1,0 +1,14 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f listEvtGenTranslation.out
+
+./listEvtGenTranslation@EXEEXT@ 
+
+cmd=`@DIFF_Q@ listEvtGenTranslation.out @srcdir@/listEvtGenTranslation.output`
+
+if [ -n "$cmd" ]; then
+  echo "listEvtGenTranslation.out and @srcdir@/listEvtGenTranslation.output differ"
+  exit 1;
+fi
+

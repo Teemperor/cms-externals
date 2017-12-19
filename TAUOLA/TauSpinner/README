@@ -1,0 +1,176 @@
+README need to be updated ...
+
+The system can ( there are three options build in the program. They can
+be set using Makefile or by uncommenting appropriate lines
+at the beginning of 'tau-reweight-test.c' ):
+1) validate if spin was used in previously generated events
+   USE_MCTESTER = yes
+   USE_SPIN_VALIDATION_ONLY = yes
+
+2) calculate spin weght for already generated events where spin effects
+   are missing.
+   USE_MCTESTER = yes
+   USE_SPIN_VALIDATION_ONLY = yes
+
+3) reweigt on flight events with spin weight and such unweighted events
+   monitor with MC-Tester
+   USE_MCTESTER = yes
+   #USE_SPIN_VALIDATION_ONLY = yes
+
+Algorithm of the example program 'tau-reweight-test.cxx':
+- read event from file 'events.dat'
+- clean up tau decays from secondary vertices such as pi0 to gamma gamma decays
+- calculate spin weight WT
+- (optionally) analyze event using MC-TESTER.
+- repeate above steps until last event is taken
+
+* This algorithm is prepared for W+ W- H+ H-  H/A  and Z/gamma*
+* In all cases only longitudinal spin effects are taken into account.
+* Simple test for W+/-, H+/-, H/A, Z/gamma* performed;
+* Some results from Acta Phys Polon B 32 (2001) 1277 reproduced.
+
+WARNING =1= (8.07.2011)
+Currently, spin weight calculation is performed only for some decay channels of tau:
+
+Channel 1:
+    tau^- --> e^- anti_nu_e      nu_tau [+ gamma]
+    tau^+ --> e^+      nu_e anti_nu_tau [+ gamma]
+
+Channel 2:
+    tau^- --> mu^- antui_nu_mu      nu_tau [+ gamma]
+    tau^+ --> mu^+       nu_mu anti_nu_tau [+ gamma]
+
+Channel 3:
+    tau^- --> pi^- nu_tau
+    tau^+ --> pi^+ anti_nu_tau
+
+Channel 4:
+    tau^- --> pi^- pi^0 nu_tau
+    tau^+ --> pi^+ pi^0 anti_nu_tau
+
+Channel 5:
+    tau^- --> pi^- pi^0 pi^0 nu_tau
+    tau^+ --> pi^+ pi^0 pi^0 anti_nu_tau
+
+    tau^- --> pi^- pi^- pi^+ nu_tau
+    tau^+ --> pi^+ pi^+ pi^- anti_nu_tau
+
+Channel 6:
+    tau^- --> K^-  nu_tau
+    tau^+ --> K^+  anti_nu_tau
+
+Channel 7:
+    tau^- --> K^-  pi^0 nu_tau
+    tau^+ --> K^+  pi^0 anti_nu_tau
+
+    tau^- --> pi^- K_S0 nu_tau
+    tau^+ --> pi^+ K_S0 anti_nu_tau
+
+    tau^- --> pi^- K_L0 nu_tau
+    tau^+ --> pi^+ K_L0 anti_nu_tau
+
+Channel 8:
+    tau^- --> pi^- pi^- pi^+ pi^0 nu_tau
+    tau^+ --> pi^+ pi^+ pi^- pi^0 anti_nu_tau
+
+Channel 9:
+    tau^- --> pi^0 pi^0 pi^0 pi^- nu_tau
+    tau^+ --> pi^0 pi^0 pi^0 pi^+ anti_nu_tau
+
+
+WARNING =2= (8.07.2011)
+
+Currently, tests of all channels 1-9 are OK.
+These channels cover just above 95% of tau width.
+
+COMMENT 2 and 3 scalar channels (Nov 2016) with K-ons added.
+
+--------------------------------------------------------------------------------
+
+Directory contents
+------------------
+
+examples/
+---------
+SETUP.C               - MC-TESTER basic setup file set for Z.
+                        Not needed if MC-TESTER is not used.
+tau-reweight-test.cxx - example of using reweighting code.
+                        Note:  tau-reweight-test.cxx uses 'events.dat' as input.
+distr.f               - external function for calculating nonSM weight
+                        used as an example of using 'nonSM2' flag
+
+src/
+----
+tau_reweight_lib.cxx  - reweighting code.
+
+nonSM.cxx             - code for non-Standard Model weight calculation.
+
+read_particles_from_TAUOLA.cxx - routines for reading particles from files
+                                 generated using Pythia8 with tau decays
+                                 from Tauola++
+                                 NOTE: this file is used by examples only
+
+include/TauSpinner/
+-------------------
+Particle.h          - particle used by library, with several routines for
+                      boosting and rotations.
+SimpleParticle.h    - px,py,pz,e and pdgid. Used for communication
+                      with user program.
+Tauola_wrapper.h    - definition of few routines from Tauola needed
+                      by library.
+tau_reweight_lib.h
+nonSM.h
+read_particles_from_TAUOLA.h - header files for routines implemented in src/
+
+To compile the library:
+-----------------------
+
+1)
+- in main directory of TAUOLA execute:
+  ./configure --with-tau-spinner --with-lhapd=<PATH_TO_LHAPDF>
+  Note that either '--with-hepmc=<PATH_TO_HEPMC>' or '--without-hepmc'
+  flag is needed as well.
+- compile the interface
+
+To run the example:
+-------------------
+
+Without using LCG scripts:
+- enter directory 'examples'
+- If using option 1, outlined at the top of this README, in Makefile uncomment:
+  #USE_SPIN_VALIDATION_ONLY = yes
+- You may want to change particle id (to be analyzed by MC-TESTER) in SETUP.C:
+  Setup::decay_particle=-24; // or -24 or 15 or -15
+- Execute './configure' with flags:
+  --with-hepmc=<PATH_TO_HEPMC>
+  --with-mc-tester=<PATH_TO_MC_TESTER> (optional)
+- make
+- Execute main program:
+  ./tau-reweight-test.exe
+
+With LCG scripts:
+- For LCG scripts it is required to provide path for HepMC
+  and LHAPDF during interface compilation
+  (and optionally - path to MC-TESTER)
+- After compiling and installing Tauola++, enter directory 'examples'
+- make
+- Execute main program:
+  ./tau-reweight-test.exe
+
+Results:
+--------
+
+Weight calculating code returns weight WT.
+Example prints out the number of events processed and avarage WT.
+It also uses WT with MC-TESTER.
+User may want to change and store all events with spin weight added.
+
+Variable representing helicity states is attributed for the Z/gamma^* and H mediated processes. 
+It can be accessed with the help of the method 
+TauSpinner::getTauSpin()   (this option is available from version 1.1 only)
+information on the spin state of tau+ is then obtained.
+
+If MC-TESTER is used, 'mc-tester.root' will be created. For instruction
+on how to analyse this file, refer to MC-TESTER documentation.
+'mc-tester.root' is for tests only.
+

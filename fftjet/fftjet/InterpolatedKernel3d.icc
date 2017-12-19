@@ -1,0 +1,48 @@
+namespace fftjet {
+    template <typename Real>
+    InterpolatedKernel3d::InterpolatedKernel3d(
+        const Real* data,
+        const std::vector<double>& scales,
+        bool useLogSpaceForScale,
+        unsigned nx, double xmin, double xmax,
+        unsigned ny, double ymin, double ymax)
+        : xmin_(xmin),
+          xmax_(xmax),
+          ymin_(ymin),
+          ymax_(ymax),
+          nxpoints_(nx),
+          nypoints_(ny),
+          useLogSpace_(useLogSpaceForScale),
+          scales_(scales),
+          randomizer_(static_cast<Real*>(0),
+                      nx, xmin, xmax,
+                      ny, ymin, ymax),
+          randomizerScale_(-1.0),
+          isDensity_(0)
+    {
+        const unsigned nscales = scales_.size();
+        assert(nscales);
+        interpols_.reserve(nscales);
+
+        const unsigned nbins = nxpoints_*nypoints_;
+        for (unsigned i=0; i<nscales; ++i)
+        {
+            // Check that the scales are reasonable
+            assert(scales_[i] > 0.0);
+            if (i)
+                assert(scales_[i-1] < scales_[i]);
+            const Real* scaledata = data ? data + i*nbins : 0;
+            interpols_.push_back(LinearInterpolator2d(scaledata,
+                 nxpoints_, xmin_, xmax_, nypoints_, ymin_, ymax_));
+        }
+    }
+
+    template <typename Real>
+    void InterpolatedKernel3d::setScaleData(
+        const unsigned scaleBin, const Real* data)
+    {
+        interpols_.at(scaleBin).setData(data);
+        randomizerScale_ = -1.0;
+        isDensity_ = 0;
+    }
+}

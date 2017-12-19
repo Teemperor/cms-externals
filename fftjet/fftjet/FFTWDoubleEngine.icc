@@ -1,0 +1,40 @@
+namespace fftjet {
+    inline FFTWDoubleEngine::FFTWDoubleEngine(
+               const unsigned nEta, const unsigned nPhi,
+               const unsigned optimization)
+        : FFTWEngine<double, fftw_complex, fftw_plan>(nEta, nPhi)
+    {
+        in = static_cast<double *>(fftw_malloc(
+              nEta_ * nPhi_ * sizeof(double)));
+        assert(in);
+        out = static_cast<fftw_complex *>(fftw_malloc(
+              nEta_ * (nPhi_/2 + 1) * sizeof(fftw_complex)));
+        assert(out);
+
+        const unsigned plannerFlags = optimization | FFTW_DESTROY_INPUT;
+        if (nEta == 1)
+        {
+            pf = fftw_plan_dft_r2c_1d(nPhi_, in, out, plannerFlags);
+            pb = fftw_plan_dft_c2r_1d(nPhi_, out, in, plannerFlags);
+        }
+        else
+        {
+            pf = fftw_plan_dft_r2c_2d(nEta_, nPhi_, in, out, plannerFlags);
+            pb = fftw_plan_dft_c2r_2d(nEta_, nPhi_, out, in, plannerFlags);
+        }
+        assert(pf);
+        assert(pb);
+
+        engineExecute = fftw_execute;
+        engineMalloc = fftw_malloc;
+        engineFree = fftw_free;
+    }
+
+    inline FFTWDoubleEngine::~FFTWDoubleEngine()
+    {
+        fftw_destroy_plan(pb);
+        fftw_destroy_plan(pf);
+        fftw_free(out);
+        fftw_free(in);
+    }
+}

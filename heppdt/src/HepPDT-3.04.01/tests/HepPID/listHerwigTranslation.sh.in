@@ -1,0 +1,14 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f listHerwigTranslation.out
+
+./listHerwigTranslation@EXEEXT@ 
+
+cmd=`@DIFF_Q@ listHerwigTranslation.out @srcdir@/listHerwigTranslation.output`
+
+if [ -n "$cmd" ]; then
+  echo "listHerwigTranslation.out and @srcdir@/listHerwigTranslation.output differ"
+  exit 1;
+fi
+

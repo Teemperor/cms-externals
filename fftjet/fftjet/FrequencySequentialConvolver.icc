@@ -1,0 +1,70 @@
+#include <cassert>
+
+#include "fftjet/scanFrequencyKernel.hh"
+
+namespace fftjet {
+    template<typename Real, typename Complex>
+    FrequencySequentialConvolver<Real,Complex>::FrequencySequentialConvolver(
+        const AbsFFTEngine<Real,Complex>* etaEngine,
+        const AbsFFTEngine<Real,Complex>* phiEngine,
+        const AbsFrequencyKernel1d* ietaKernel,
+        const AbsFrequencyKernel1d* iphiKernel,
+        const std::vector<double>& phiScales,
+        const unsigned minEtaBin, const unsigned maxEtaBin,
+        const bool fixEfficiency)
+        : AbsSequentialConvolver<Real,Complex>(
+            etaEngine, phiEngine, phiScales,
+            minEtaBin, maxEtaBin, fixEfficiency),
+          etaKernel(ietaKernel),
+          phiKernel(iphiKernel)
+    {
+        assert(etaKernel);
+        assert(phiKernel);
+    }
+
+    template<typename Real, typename Complex>
+    KernelData<Real,Complex>
+    FrequencySequentialConvolver<Real,Complex>::buildImage(
+        const double scale, const AbsFFTEngine<Real,Complex>* engine,
+        const AbsFrequencyKernel1d* kernel,
+        const unsigned minFixBin, const unsigned maxFixBin)
+    {
+        Complex* imageBuf = engine->allocateComplex();        
+        scanFrequencyKernel1d(engine, kernel, scale, imageBuf);
+
+        const unsigned nbins = engine->nPhi();
+        Real* tempBuffer = new Real[nbins];
+        engine->transformBack(imageBuf, tempBuffer);
+
+        // Normalize the spatial image as density
+        const Real norma = normalizeFrequencyAsDensity(
+            engine, imageBuf, tempBuffer);
+        for (unsigned i=0; i<nbins; ++i)
+            tempBuffer[i] /= norma;
+        const double area = static_cast<double>(norma);
+
+        // Build the efficiency correction
+        Real* norm = 0;
+        if (minFixBin < maxFixBin)
+            norm = AbsSequentialConvolver<Real, Complex>::buildEffNorm(
+                tempBuffer, nbins);
+        return KernelData<Real,Complex>(tempBuffer, imageBuf, norm, area);
+    }
+
+    template<typename Real, typename Complex>
+    KernelData<Real,Complex>
+    FrequencySequentialConvolver<Real,Complex>::buildKernelImageEta(
+        const double scale, const AbsFFTEngine<Real,Complex>* engine,
+        const unsigned minFixBin, const unsigned maxFixBin)
+    {
+        return buildImage(scale, engine, etaKernel, minFixBin, maxFixBin);
+    }
+
+    template<typename Real, typename Complex>
+    KernelData<Real,Complex>
+    FrequencySequentialConvolver<Real,Complex>::buildKernelImagePhi(
+            const double scale, const AbsFFTEngine<Real,Complex>* engine)
+    {
+        return buildImage(scale, engine, phiKernel, 0U, 0U);
+    }
+}

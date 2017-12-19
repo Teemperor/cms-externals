@@ -1,0 +1,12 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f listQQTranslation.out
+
+./listQQTranslation@EXEEXT@ 
+cmd=`@DIFF_Q@ listQQTranslation.out @srcdir@/listQQTranslation.output`
+
+if [ -n "$cmd" ]; then
+  echo "listQQTranslation.out and @srcdir@/listQQTranslation.output differ"
+  exit 1;
+fi

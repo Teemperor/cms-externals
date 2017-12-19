@@ -1,0 +1,171 @@
+Version 1.5.1 - July 17 2014, by I. Volobouev
+
+* More fixes for the clang compiler.
+
+
+Version 1.5.0 - May 05 2014, by I. Volobouev
+
+* Added the code for calculating cluster split and merge "times", weighted
+  by the local transverse energy fraction.
+
+* Fixes for the clang compiler.
+
+
+Version 1.4.2 - September 30 2013, by I. Volobouev
+
+* Updated file "examples/processResults.cc" (removed a local unused
+  typedef about which g++ issues a warning these days).
+
+* Package build tools updated.
+
+
+Version 1.4.1 - May 20 2013, by I. Volobouev
+
+* Updated Pythia in "examples/generator" to version 6.4.27.
+
+* Updated example generator so that it can generate flat spectra
+  both in Pt and in log(Pt).
+
+
+Version 1.4.0 - November 26 2012, by I. Volobouev
+
+* Fixed a number of cases where some variable is set but not used.
+  This addresses complaints from recent g++ compiler versions.
+
+* Updated some template-based code in FasterKernelRecombinationAlg.icc
+  to ensure compliance with stricter template name resolution rules in
+  recent g++ compiler versions.
+
+* Package build tools updated.
+
+
+Version 1.3.2 - April 5 2012, by I. Volobouev
+
+* Package build tools updated, no changes to the code itself
+
+
+Version 1.3.1 - July 15 2010, by I. Volobouev
+
+* Added read/write operations to the Grid2d class.
+
+* Changed read/write operations for all persistent classes so that they
+  use istream/ostream instead of ifstream/ofstream.
+
+
+Version 1.3.0 - June 29 2010, by I. Volobouev
+
+* Added methods "nClustersAboveMagS2Threshold" and "getMagS2OptimalNodes"
+  to the SparseClusteringTree class.
+
+* Changed the way ClusteringSequencer and ConstScaleReconstruction use
+  peak selectors. They can now use simpler functor objects. As a result,
+  same code can interface peak selectors for the ClusteringSequencer and
+  for clustering trees to some interpretive system.
+
+* Added recoScaleRatio member to the Peak, setScaleRatio method to the
+  ScaleSpaceKernel, and ratio-setting code to the energy recombination
+  algorithms. It is now trivial to implement eta dependence of the shape
+  for the jet membership functions.
+
+* Added "convergenceDistance_" member with corresponding access methods
+  to the "RecombinedJet" class. Also added the "setPrecluster" method.
+
+* Changed the "less" operator of "Peak" to compare by magnitude times
+  scale squared.
+
+* Added "operator==" to the Grid2d class.
+
+* Added "scaleData" function to the Grid2d class which multiplies the
+  data by an eta-dependent factor.
+
+
+Version 1.2.0 - June 20 2010, by I. Volobouev
+
+* Changed the OpenDX visualization format so that it now includes
+  the run number
+
+* Fixed a few comparisons of signed and unsigned integers in the
+  I/O-related functions
+
+
+Version 1.1.2 - June 16 2010, by I. Volobouev
+
+* Added typedefs for functor arguments in "SimpleFunctors.hh".
+
+* Added facilities for sparsifying the clustering trees (with
+  automatic bifurcation point avoidance)
+
+* A significant bug is fixed in the "closestNonDescendant" method
+  of "AbsClusteringTree" class
+
+* Added the "PeakEtaDependentDistance" class -- an eta-dependent metric
+  in the eta-phi space
+
+
+Version 1.1.1 - April 9 2010, by I. Volobouev
+
+* Added checks for self-assignment in all "operator=" implementations.
+
+
+Version 1.1.0 - March 14 2010, by I. Volobouev
+
+* Added "sequential convolvers" -- the ability to perform Fourier
+  transforms separately in each eta bin. This can be useful if the
+  jet shape changes depending on eta, as expected in the presence
+  of magnetic field and for wall/plug calorimeters. The new classes
+  are "SequentialConvolver" and "FrequencySequentialConvolver".
+  These classes use 1-d kernels which have been added as well.
+
+
+Version 1.0.6 - Sep 12 2009, by I. Volobouev
+
+* A few small fixes not visible to the user (removed couple comparisons
+  of signed to unsigned integers, included <algorithm> header into
+  AbsClusteringTree.icc for compatibility with gcc 4.4, and couple
+  other minor fixes).
+
+
+Version 1.0.5 - June 23 2009, by I. Volobouev
+
+* Added the eta-phi correlation coefficient to the "RecombinedJet" class
+  and modified the recombination algorithms to calculate this coefficient.
+
+
+Version 1.0.4 - June 19 2009, by I. Volobouev
+
+* Added correct "#include" statements to the "FrequencyKernelConvolver.hh"
+  header file.
+
+* Made a few improvements to the user manual.
+
+
+Version 1.0.3 - June 11 2009, by I. Volobouev
+
+* Added jet recombination API for data represented by collections of
+  4-vectors
+
+* The functors used to implement the noise/unclustered energy membership
+  functions now inherit from Functor2<double,double,BgData> instead
+  of Functor2<double,Real,BgData>.
+
+
+Version 1.0.2 - May 27 2009, by I. Volobouev
+
+* Anisotropic diffusion causes problems in "DiscreteGauss2d" for all
+  gamma values except 0 (the reasons are not trivial). So, the gamma
+  is no longer a parameter -- it is forced to be 0.
+
+* Detailed formula for the "DiscreteGauss2d" class is now in the manual.
+
+
+Version 1.0.1 - May 25 2009, by I. Volobouev
+
+* Removed header "FrequencyKernels.hh" -- this was an old attemps to write
+  a separate functor for subgaussian distributions. Use RealFrequencyKernel
+  together with "SubGauss" class to get this functionality.
+
+* Added class "DiscreteGauss2d". This is the Gaussian kernel corrected
+  for the binning effects. Very useful at small scales.
+
+* Added class "FrequencyKernelConvolver" which can be used to memoize
+  convolutions with a kernel defined in the frequency domain.

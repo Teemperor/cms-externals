@@ -1,0 +1,11 @@
+#! /bin/sh
+# @configure_input@
+
+./testParticleIDMethods@EXEEXT@ 
+
+cmd=`@DIFF_Q@ testParticleIDMethods.out @srcdir@/testParticleIDMethods.output`
+
+if [ -n "$cmd" ]; then
+  echo "testParticleIDMethods.out and @srcdir@/testParticleIDMethods.output differ"
+  exit 1;
+fi

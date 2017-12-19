@@ -1,0 +1,51 @@
+TauSpinner to evaluate CP effects in Higgs decays at LHC 
+
+Tomasz Pzedzinski, Elzbieta Richter-Was, Zbigniew-Was
+
+1) For physics documentation see our paper:
+   TauSpinner: a tool for simulating CP effects in $ H \to \tau \tau$ decays at LHC
+   Hep/ph ....
+   To execute the demos:
+   - Compile Tauola++ with TauSpinner and set up TauSpinner examples.
+     For details on how to run the present set of demos see the paper.
+
+2) Initialization of options (defined in CP-test.cxx) for TauSpinner demos of subdirs:
+
+   // Next 3 lines are  used to initialize TauSpinner
+   // CMSENE should be changed, Ipp should not be changed,
+   // examples are set to work with unpolarized sammples only, Ipol is not
+   // functioning yet.
+   double CMSENE = 14000.; // center of mass system energy used in PDF calculation
+   bool   Ipp    = true;   // for pp collisions
+   int    Ipol   = 1;      // are input samples polarized?
+
+   // Initialize TauSpinner (flags nonSM and nonSMN are 0 for these tests)
+   initialize_spinner(Ipp, Ipol, 0, 0, CMSENE);
+
+   // Next line is used to initialize transverse spin effects in calculation of TauSpinner weight 
+   // for  H-rho, H-pi tests:
+   setHiggsParametersTR(-1.0, 1.0, 0.0, 0.0); // for scalar H
+   //setHiggsParametersTR( 1.0,-1.0, 0.0, 0.0); // for pseudo-scalar H
+   //double theta=0.2;
+   //setHiggsParametersTR(-cos(2*theta),cos(2*theta) ,-sin(2*theta),-sin(2*theta));
+   // for mixed parity case
+
+   // Next line is used  to initialize transverse spin effects in calculation of TauSpinner weight 
+   // by  CP-test-Z-pi, CP-test-Z-rho
+   // Multipliers for  components of transverse density matrix of DY
+   //                  (Rxx,Ryy,Rxy,Ryx)
+   setZgamMultipliersTR(1., 1., 1., 1. );
+
+   // NOTE: for Z decays, table1-1.txt and table2-2.txt must be present in directory
+   //       from which the program is executed. Important for  CP-test-Z-pi, CP-test-Z-rho.
+   //       Otherwise transverse spin effects will be absent.
+
+3) to execute:
+   make clean
+   make
+   cd Z(H)-pi(rho)
+   ../CP-test.exe events.dat
+   finally to compare results:
+   ../compare.sh  scalar.root pseudoscalar.root  (or any other previously 
+                                                  obtained/archived resuls)
+

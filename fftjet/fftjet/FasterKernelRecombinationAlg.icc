@@ -1,0 +1,347 @@
+#include <cassert>
+
+namespace fftjet {
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    FasterKernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::
+    FasterKernelRecombinationAlg(
+        ScaleSpaceKernel* ikernel,
+        const Functor2<double,double,BgData>* bgWeight,
+        const double iunlikelyBgWeight,
+        const double idataCutoff,
+        const bool iwinnerTakesAll,
+        const bool ibuildCorrelationMatrix,
+        const bool ibuildClusterMask,
+        const unsigned ietaBinMin, const unsigned ietaBinMax)
+        : KernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::KernelRecombinationAlg(
+            ikernel, bgWeight, iunlikelyBgWeight, idataCutoff,
+            iwinnerTakesAll, ibuildCorrelationMatrix, ibuildClusterMask,
+            ietaBinMin, ietaBinMax),
+        // The following initializer will make sure that ikernel is an AbsKernel2d
+        kernelScans(dynamic_cast<const AbsKernel2d*>(ikernel)),
+        scanTable(0),
+        scanTableLen(0)
+    {
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    FasterKernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::
+    ~FasterKernelRecombinationAlg()
+    {
+        delete [] scanTable;
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    void FasterKernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::
+    setupTableBuf(const unsigned njets)
+    {
+        if (njets > scanTableLen)
+        {
+            delete [] scanTable;
+            scanTable = new const Real*[njets];
+            scanTableLen = njets;
+        }
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    int FasterKernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::run(
+        const std::vector<Peak>& peaks,
+        const Grid2d<Real>& eventData,
+        const BgData* bgData, const unsigned nBgEta, const unsigned nBgPhi,
+        std::vector<RecombinedJet<VectorLike> >* outputJets,
+        VectorLike* unclustered, double* unused)
+    {
+        if (this->performPreliminaryProcessing(
+                peaks, eventData, bgData, nBgEta, nBgPhi,
+                outputJets, unclustered, unused))
+            return 0;
+
+        // Make sure individual peak functors are not set
+        for (unsigned ijet=0; ijet<B::lastNJets; ++ijet)
+            assert(B::peakPositions[ijet]->membershipFunction() == 0);
+
+        // Get memory for the kernel scan pointers
+        setupTableBuf(B::lastNJets);
+
+        // Set up kernel scan pointers
+        for (unsigned ijet=0; ijet<B::lastNJets; ++ijet)
+            scanTable[ijet] = kernelScans.getKernelScan(
+                eventData, B::clusterScales[ijet]);
+
+        // Map the peak coordinates into the scans
+        const unsigned etaBinMax = B::etaBinMax0 < B::lastNEta ? 
+                                   B::etaBinMax0 : B::lastNEta;
+        unsigned *etaMap, *phiMap;
+        kernelScans.mapCoords(eventData, B::etaBinMin, etaBinMax,
+                              B::peakPositions, B::lastNJets,
+                              &etaMap, &phiMap);
+
+        // Some variables which will be needed below
+        const unsigned bgStride = B::bgDim == 2 ? 1 : 0;
+        const bool use4Vec = this->recombine4Vectors();
+
+        // Go over all grid points and figure out to which jet
+        // that point belongs.
+        for (unsigned ieta=B::etaBinMin; ieta<etaBinMax; ++ieta)
+        {
+            const Real eta(eventData.etaBinCenter(ieta));
+
+            // Figure out dEta for each jet
+            for (unsigned ijet=0; ijet<B::lastNJets; ++ijet)
+                B::dEta[ijet] = eta - B::peakPositions[ijet]->eta();
+
+            // We will try to get rid of each point in the inner
+            // cycle as fast as possible. The following few lines
+            // of code depend, unfortunately, on the internal layout
+            // of the Grid2d object. On the positive side, we can
+            // get rid of a point below the cutoff without making
+            // the "uncheckedAt(ieta, iphi)" function call.
+            const Real* databuf = eventData.data() + ieta*B::lastNPhi;
+
+            const BgData* bgbuf;
+            switch (B::bgDim)
+            {
+            case 0:
+                bgbuf = bgData;
+                break;
+            case 1:
+                bgbuf = bgData + ieta;
+                break;
+            case 2:
+                bgbuf = bgData + ieta*B::lastNPhi;
+                break;
+            default:
+                assert(0);
+            }
+
+            for (unsigned iphi=0; iphi<B::lastNPhi; ++iphi)
+            {
+                if (databuf[iphi] <= B::dataCutoff)
+                    continue;
+
+                const Real gridValue(databuf[iphi]);
+                const Real phi(eventData.phiBinCenter(iphi));
+                const VectorLike gridVec(this->vMaker(gridValue, eta, phi));
+                const double* dPhi = B::dphiBuffer + iphi*B::lastNJets;
+                const double bgW((*B::bgWeightCalc)(gridValue, bgbuf[iphi*bgStride]));
+
+                // Cycle over jets. This is the most speed-critical
+                // cycle in the whole algorithm.
+                double sum(0.0), maxW(0.0);
+                unsigned maxWJet(B::lastNJets);
+                for (unsigned ijet=0; ijet<B::lastNJets; ++ijet)
+                {
+                    const unsigned ix = etaMap[ieta*B::lastNJets + ijet];
+                    if (ix < B::lastNEta)
+                    {
+                        const double f = B::kernelScales[ijet]*
+                            scanTable[ijet][ix*B::lastNPhi +
+                                            phiMap[iphi*B::lastNJets + ijet]];
+                        sum += f;
+                        B::weights[ijet] = f;
+                        if (f > maxW)
+                        {
+                            maxW = f;
+                            maxWJet = ijet;
+                        }
+                    }
+                }
+
+                if (maxWJet == B::lastNJets)
+                {
+                    // No contributing cluster, so pure unclustered
+                    *unclustered += gridVec;
+                    *unused += gridValue;
+                }
+                else 
+                {
+                    const double totalSum = sum + bgW;
+
+                    if (B::buildClusterMask && maxW > bgW)
+                        B::clusterMask[ieta*B::lastNPhi + iphi] = maxWJet + 1;
+
+                    if (B::winnerTakesAll)
+                    {
+                        // Hard clustering. All energy goes
+                        // to the cluster with the highest weight.
+                        if (maxW > bgW)
+                        {
+                            if (use4Vec)
+                                B::jets[maxWJet] += gridVec;
+                            B::weightSum[maxWJet] += 1.0;
+                            B::energySum[maxWJet] += gridValue;
+                            B::etaSum[maxWJet] += gridValue*eta;
+                            B::etaEnergySum[maxWJet] += 
+                                gridValue*B::dEta[maxWJet]*B::dEta[maxWJet];
+                            B::phiEnergySum[maxWJet] += 
+                                gridValue*dPhi[maxWJet]*dPhi[maxWJet];
+                            B::energyVariance[maxWJet] +=
+                                gridValue*gridValue*(1.0 - maxW/totalSum);
+                            B::phiSum[maxWJet] += gridValue*dPhi[maxWJet];
+                        }
+                        else
+                        {
+                            *unclustered += gridVec;
+                            *unused += gridValue;
+                        }
+                    }
+                    else
+                    {
+                        // Fuzzy clustering. Distribute the cell energy
+                        // among all clusters according to their weights.
+
+                        // Unclustered energy fraction
+                        const double bgfrac = bgW/totalSum;
+                        if (bgfrac > 0.0)
+                        {
+                            *unclustered += gridVec*bgfrac;
+                            *unused += gridValue*bgfrac;
+                        }
+                        
+                        // Fractions which belong to each jet
+                        for (unsigned ijet=0; ijet<B::lastNJets; ++ijet)
+                        {
+                            const double w = B::weights[ijet]/totalSum;
+                            if (w > 0.0)
+                            {
+                                const double ePart = gridValue*w;
+                                if (use4Vec)
+                                    B::jets[ijet] += gridVec*w;
+                                B::weightSum[ijet] += w;
+                                B::energySum[ijet] += ePart;
+                                B::etaEnergySum[ijet] += 
+                                    ePart*B::dEta[ijet]*B::dEta[ijet];
+                                B::etaSum[ijet] += ePart*eta;
+                                B::phiEnergySum[ijet] +=
+                                    ePart*dPhi[ijet]*dPhi[ijet];
+                                B::energyVariance[ijet] += 
+                                    gridValue*ePart*(1.0 - w);
+                                B::phiSum[ijet] += ePart*dPhi[ijet];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        this->buildOutput(outputJets, true);
+
+        return 0;
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    FasterKernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::
+    KernelScanCollection::KernelScanCollection(const AbsKernel2d* ker)
+        : kernel(ker),
+          mappedEta(0),
+          mapBufLen(0)
+    {
+        assert(kernel);
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    FasterKernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::
+    KernelScanCollection::~KernelScanCollection()
+    {
+        for (typename std::map<double, Grid2d<Real>*>::iterator it = 
+                 kernelScans.begin(); it != kernelScans.end(); ++it)
+            delete it->second;
+        delete [] mappedEta;
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    void FasterKernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::
+    KernelScanCollection::mapCoords(
+        const Grid2d<Real>& eventData, const unsigned etaBinMin,
+        const unsigned etaBinMax, const Peak** peakPositions,
+        const unsigned lastNJets, unsigned **etaBuf, unsigned **phiBuf)
+    {
+        assert(peakPositions);
+        assert(etaBuf);
+        assert(phiBuf);
+
+        // Allocate enough memory
+        const unsigned lastNEta = eventData.nEta();
+        const unsigned lastNPhi = eventData.nPhi();
+        const unsigned mapLen = lastNJets*(lastNPhi + lastNEta);
+        if (mapLen > mapBufLen)
+        {
+            delete [] mappedEta;
+            mappedEta = new unsigned[mapLen];
+            mapBufLen = mapLen;
+        }
+        unsigned* mappedPhi = mappedEta + lastNJets*lastNEta;
+
+        // Scan eta
+        const int halfEta = lastNEta/2;
+        for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+        {
+            const int ijetEta = eventData.getEtaBin(peakPositions[ijet]->eta());
+            for (int ieta=etaBinMin; ieta < static_cast<int>(etaBinMax); ++ieta)
+            {
+                const int ipos = ieta - ijetEta + halfEta;
+                if (ipos >= 0 && ipos < static_cast<int>(lastNEta))
+                    mappedEta[ieta*lastNJets + ijet] = ipos;
+                else
+                    mappedEta[ieta*lastNJets + ijet] = lastNEta;
+            }
+        }
+
+        // Scan phi
+        const unsigned halfPhi = lastNPhi/2;
+        for (unsigned ijet=0; ijet<lastNJets; ++ijet)
+        {
+            const unsigned ijetPhi = eventData.getPhiBin(peakPositions[ijet]->phi());
+            for (unsigned iphi=0; iphi<lastNPhi; ++iphi)
+                mappedPhi[iphi*lastNJets + ijet] = 
+                    (iphi + halfPhi + lastNPhi - ijetPhi) % lastNPhi;
+        }
+
+        *etaBuf = mappedEta;
+        *phiBuf = mappedPhi;
+    }
+
+    template<typename Real, typename VectorLike, typename BgData, typename VBuilder>
+    const Real* FasterKernelRecombinationAlg<Real,VectorLike,BgData,VBuilder>::
+    KernelScanCollection::getKernelScan(
+        const Grid2d<Real>& eventData, const double scale)
+    {
+        typename std::map<double, Grid2d<Real>*>::iterator it = 
+            kernelScans.find(scale);
+        if (it == kernelScans.end())
+        {
+            // This should not happen very often.
+            // We need to perform a new kernel scan.
+            Grid2d<Real>* scan = new Grid2d<Real>(eventData);
+            const unsigned nEta = scan->nEta();
+            const unsigned nPhi = scan->nPhi();
+            const Real x0 = scan->etaBinCenter(nEta/2);
+            const Real y0 = scan->phiBinCenter(nPhi/2);
+            long double sum = 0.0L;
+            for (unsigned ieta=0; ieta<nEta; ++ieta)
+            {
+                const double dx = scan->etaBinCenter(ieta) - x0;
+                for (unsigned iphi=0; iphi<nPhi; ++iphi)
+                {
+                    double dphi = scan->phiBinCenter(iphi) - y0;
+                    while (dphi > M_PI)
+                        dphi -= (2.0*M_PI);
+                    while (dphi < -M_PI)
+                        dphi += (2.0*M_PI);
+                    const double f = (*kernel)(dx, dphi, scale);
+                    sum += f;
+                    scan->uncheckedSetBin(ieta, iphi, f);
+                }
+            }
+            const double integ = sum*scan->etaBinWidth()*scan->phiBinWidth();
+            assert(integ);
+            scan->scaleData(1.0/integ);
+            it = kernelScans.insert(std::make_pair(scale,scan)).first;
+        }
+        if (!it->second->isCompatible(eventData))
+        {
+            // This is not the intended mode of operation for this class
+            assert(!"Please maintain consistency of the data binning!");
+        }
+        return it->second->data();
+    }
+}

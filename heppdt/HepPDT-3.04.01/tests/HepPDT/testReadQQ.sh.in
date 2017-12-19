@@ -1,0 +1,14 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f testReadQQ.out
+
+./testReadQQ@EXEEXT@
+
+if ( ! `sed 's/e-0\([0-9][0-9]\)/e-\1/g' testReadQQ.out | sed 's/e+0\([0-9][0-9]\)/e+\1/g' | @DIFF_Q@ - @srcdir@/testReadQQ.output > /dev/null` )
+then
+  echo "testReadQQ.out and @srcdir@/testReadQQ.output differ"
+  exit 1;
+fi
+
+exit 0;

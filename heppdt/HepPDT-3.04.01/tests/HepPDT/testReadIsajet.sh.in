@@ -1,0 +1,15 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f testReadIsajet.out
+
+./testReadIsajet@EXEEXT@
+if ( ! `sed 's/e-0\([0-9][0-9]\)/e-\1/g' testReadIsajet.out | \
+  sed 's/e+0\([0-9][0-9]\)/e+\1/g'  | \
+  @DIFF_Q@ - @srcdir@/testReadIsajet.output > /dev/null` )
+then
+  echo "testReadIsajet.out and @srcdir@/testReadIsajet.output differ"
+  exit 1;
+fi
+
+exit 0;

@@ -1,0 +1,14 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f listEvtGenNames.out
+
+./listEvtGenNames@EXEEXT@ 
+
+if ( ! `@DIFF_Q@ listEvtGenNames.out @srcdir@/listEvtGenNames.output > /dev/null` )
+then
+  echo "listEvtGenNames.out and @srcdir@/listEvtGenNames.output differ"
+  exit 1;
+fi
+
+exit 0;

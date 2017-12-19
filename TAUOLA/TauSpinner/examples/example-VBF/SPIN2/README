@@ -1,0 +1,55 @@
+MB and ZW   Dec 22 2016
+
+This is the code preparing libraries for the SPIN2 example. Alternative 
+system of matrix elements for tau pair associated with two jets is provided.
+This is quite a big project in itself so we have moved all its elements 
+to separate directory SPIN2, where special library is defined.
+
+This example can work as a prototype for such external calculations.
+The FORTRAN subroutine which is used for ME calculation is located in ME/SPIN2_distr.f file. 
+It need to be called from user program example-VBF.cxx, with the help of F77-C++ interfacing routine.
+The implementation  of ME is autonomous from the rest of TAUOLA TauSpinner, except initialization 
+routine invoked from the user main program.
+  
+===========
+To start: =
+===========
+ 1) open Makefile in SPIN2 directory and follow instruction there.
+ 2) introduce link to the SPIN2 library into configuration of TAUOLA/TauSpinner/examples/
+
+===========================================
+HOW TO ACTIVATE SPIN2 in example-VBF.cxx: =
+===========================================
+1) Modify TAUOLA/TauSpinner/examples/Makefile  uncomment lines containing SPIN2.
+2) Modify TAUOLA/TauSpinner/examples/example-VBF/example-VBF.cxx again look for 
+   commented lines which contain spin2 or SPIN2.
+   Note that example-VBF.cxx will use method  TauSpinner::set_vbfdistrModif(SPIN2::spin2distr);
+   and call the F77 spin2distr_() function for calculating ME with the help of C++
+   SPIN2::spin2distr method. 
+3) You have to export path to SPIN2 library
+   export LD_LIBRARY_PATH="/home ... TAUOLA/TauSpinner/examples/example-VBF/SPIN2/lib:$LD_LIBRARY_PATH"
+4) Execute Makefile in present SPIN2 directory.
+5) You can now compile TAUOLA/TauSpinner/examples/
+                       TAUOLA/TauSpinner/examples/example-VBF
+   with SPIN2 library activated.
+6) If you have your own alternative matrix element you can follow the scheme
+   replacing SPIN2 with your own code. SPIN2 can be the understood as an example. 
+
+
+========================================================================
+Code of SPIN2/MC directory was obtained with the help of Madgraph. Code
+was in large part written in F77 with the help of MadGraph, similar as
+part of tauspinner library. Naming conflicts with tauspinner library
+appeared. In particular for names of subroutines calculating amplitudes.
+The names of subroutines calculating amplitudes for ME/SPIN2_functions.f 
+had to be changed.
+
+Also distinct versions of Madgraph library functions, 
+such as ixxxx  FFV5_3 had to be introduced. These seemed to be  common for 
+SPIN2/ME/SPIN2_functions.f and TauSpinner/src/VBF/VBF_functions.f.
+This is because different versions of MadGraph were used for
+tauspinner library and SPIN2 library construction.
+
+Let us stress, that user code for anomalous amplitudes is expected to be
+written in C++ or any other language where features like namespace are
+available.

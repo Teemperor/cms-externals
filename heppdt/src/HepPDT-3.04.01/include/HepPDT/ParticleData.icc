@@ -1,0 +1,119 @@
+// ----------------------------------------------------------------------
+//
+// ParticleData.icc
+// Author: Lynn Garren
+//
+// ----------------------------------------------------------------------
+
+#include <algorithm>	// swap()
+
+namespace HepPDT {
+
+inline ParticleData::ParticleData( const TempParticleData & tpd )
+: itsID            ( tpd.tempID ), 
+  itsParticleName  ( tpd.tempParticleName ), 
+  itsSource        ( tpd.tempSource ), 
+  itsOriginalID    ( tpd.tempOriginalID ), 
+  itsCharge        ( tpd.tempCharge ),
+  itsColorCharge   ( tpd.tempColorCharge ),
+  itsSpin          ( tpd.tempSpin ),
+  itsQuarks        ( 0 ),
+  itsResonance     ( ResonanceStructure( tpd.tempMass, tpd.tempWidth, tpd.tempLowCutoff, tpd.tempHighCutoff ) )
+{
+    getConstituentsFromPID();
+}
+
+inline ParticleData::~ParticleData()
+{ ; }
+
+inline void  ParticleData::swap( ParticleData & other )
+{
+    std::swap(itsParticleName, other.itsParticleName); 
+    std::swap(itsSource      , other.itsSource); 
+    std::swap(itsOriginalID  , other.itsOriginalID); 
+    itsID.swap( other.itsID ); 
+    std::swap(itsCharge      , other.itsCharge);
+    std::swap(itsColorCharge , other.itsColorCharge);
+    itsSpin.swap( other.itsSpin );
+    std::swap(itsQuarks      , other.itsQuarks);
+    std::swap(itsResonance   , other.itsResonance);
+}
+
+inline ParticleData::ParticleData( const ParticleData & orig )
+: itsID            ( orig.itsID ), 
+  itsParticleName  ( orig.itsParticleName ), 
+  itsSource        ( orig.itsSource ), 
+  itsOriginalID    ( orig.itsOriginalID ), 
+  itsCharge        ( orig.itsCharge ),
+  itsColorCharge   ( orig.itsColorCharge ),
+  itsSpin          ( orig.itsSpin ),
+  itsQuarks        ( orig.itsQuarks ),
+  itsResonance     ( orig.itsResonance )
+{ ; }
+
+inline ParticleData & ParticleData::operator=( const ParticleData & rhs )
+{ 
+  ParticleData temp( rhs );
+  swap( temp );
+  return *this;
+}
+
+inline bool ParticleData::isStable() const
+{
+    if( totalWidth().value() == -1. ) return false;
+    if( totalWidth().value() > 0 || lifetime().value() > 0 ) return false;
+    return true;
+}
+
+inline bool ParticleData::operator<( const ParticleData & other ) const
+{ 
+  return ( mass() < other.mass() );
+}
+
+inline bool ParticleData::operator==( const ParticleData & other ) const
+{ 
+  return ( itsID == other.itsID );
+}
+
+inline void ParticleData::getConstituentsFromPID()
+{
+    Quarks qlist = itsID.quarks();
+    if( qlist.nq1 != 0 ) {
+         ParticleID pid(qlist.nq1);
+         Constituent c( pid, 1 );
+         addConstituent( c );
+    }
+    if( qlist.nq2 != 0 ) {
+         ParticleID pid(qlist.nq2);
+         Constituent c( pid, 1 );
+         addConstituent( c );
+    }
+    if( qlist.nq3 != 0 ) {
+         ParticleID pid(qlist.nq3);
+         Constituent c( pid, 1 );
+         addConstituent( c );
+    }
+}
+
+inline Constituent ParticleData::constituent( unsigned int i ) const
+{
+    /// return this constituent if it exists
+    if( i >= itsQuarks.size() ) {
+         // attempting invalid operation
+         return Constituent();
+    } else {
+        return itsQuarks[i];
+    }
+}
+
+inline ParticleID ParticleData::constituentParticle( unsigned int i ) const
+{
+    if( i >= itsQuarks.size() ) {
+         // attempting invalid operation
+         return ParticleID(0);
+    } else {
+        return itsQuarks[i].pid();
+    }
+}
+
+}	// HepPDT

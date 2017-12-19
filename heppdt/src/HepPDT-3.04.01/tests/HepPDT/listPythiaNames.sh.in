@@ -1,0 +1,8 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f listPythiaNames.out
+
+./listPythiaNames@EXEEXT@ 
+@DIFF_Q@ listPythiaNames.out @srcdir@/listPythiaNames.output > /dev/null
+

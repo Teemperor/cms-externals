@@ -1,0 +1,930 @@
+#include <cmath>
+#include <cfloat>
+#include <cassert>
+#include <iostream>
+#include <set>
+#include <algorithm>
+
+#include "fftjet/StatAccumulator.hh"
+#include "fftjet/SimplePredicates.hh"
+
+namespace fftjet {
+    template<typename Cluster, typename LevelInfo>
+    inline AbsClusteringTree<Cluster,LevelInfo>::AbsClusteringTree()
+        : badId(UINT_MAX,UINT_MAX)
+    {
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    inline AbsClusteringTree<Cluster,LevelInfo>::AbsClusteringTree(
+        const AbsClusteringTree& /* r */)
+        : badId(UINT_MAX,UINT_MAX)
+    {
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    inline AbsClusteringTree<Cluster,LevelInfo>&
+    AbsClusteringTree<Cluster,LevelInfo>::operator=(const AbsClusteringTree&)
+    {
+        return *this;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    inline double AbsClusteringTree<Cluster,LevelInfo>::distanceToParent(
+        const TreeNodeId& id) const
+    {
+        return clusterDistance(id, parentId(id));
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    double AbsClusteringTree<Cluster,LevelInfo>::minScale() const
+    {
+        const unsigned nlevels = this->nLevels();
+        if (nlevels > 1)
+            return this->getScale(nlevels - 1);
+        else
+            return 0.0;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    double AbsClusteringTree<Cluster,LevelInfo>::maxScale() const
+    {
+        const unsigned nlevels = this->nLevels();
+        if (nlevels > 1)
+            return this->getScale(1);
+        else
+            return 0.0;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    unsigned AbsClusteringTree<Cluster,LevelInfo>::nClusters() const
+    {
+        unsigned nclu = 0;
+        const unsigned nlevels = this->nLevels();
+        for (unsigned lev=0; lev<nlevels; ++lev)
+            nclu += this->nClusters(lev);
+        return nclu;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    TreeNodeId AbsClusteringTree<Cluster,LevelInfo>::closestNeighbor(
+        const TreeNodeId& idIn, const BooleanPredicate& pred,
+        double* distance) const
+    {
+        assert(distance);
+        *distance = DBL_MAX;
+        TreeNodeId bestNeighbor(badId);
+        TreeNodeId id(idIn.first,0);
+
+        // The following will verify that idIn.first is legal
+        const unsigned nclus = nClusters(idIn.first);
+
+        // Make sure that idIn.second is legal as well
+        assert(idIn.second < nclus);
+
+        // Cycle over clusters on this level
+        for (; id.second<nclus; ++id.second)
+            if (idIn.second != id.second)
+                if (pred(uncheckedCluster(id)))
+                {
+                    const double d = uncheckedClusterDistance(id, idIn);
+                    if (d < *distance)
+                    {
+                        *distance = d;
+                        bestNeighbor = id;
+                    }
+                }
+
+        return bestNeighbor;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    void AbsClusteringTree<Cluster,LevelInfo>::closestDauOrSelf(
+        const TreeNodeId& target,
+        const TreeNodeId& id,
+        const BooleanPredicate& pred,
+        double* bestDistanceSoFar,
+        TreeNodeId* bestIdSoFar) const
+    {
+        // Prune the recursion as soon as possible
+        const double d = uncheckedClusterDistance(id, target);
+        if (d - uncheckedNodeRadius(id) > *bestDistanceSoFar)
+            return;
+
+        // Check if this cluster provides the best distance
+        if (pred(uncheckedCluster(id)))
+            if (d < *bestDistanceSoFar)
+            {
+                *bestDistanceSoFar = d;
+                *bestIdSoFar = id;
+            }
+
+        // Go over the daughters. It is more likely that more
+        // far away daughter will end up closer to the target.
+        const int ndaus = nDaughters(id);
+        for (int i=ndaus-1; i>=0; --i)
+            closestDauOrSelf(target, daughterId(id,i), pred,
+                             bestDistanceSoFar, bestIdSoFar);
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    void AbsClusteringTree<Cluster,LevelInfo>::farthestDauOrSelf(
+        const TreeNodeId& target,
+        const TreeNodeId& id,
+        const BooleanPredicate& pred,
+        double* bestDistanceSoFar,
+        TreeNodeId* bestIdSoFar) const
+    {
+        // Prune the recursion as soon as possible
+        const double d = uncheckedClusterDistance(id, target);
+        if (d + uncheckedNodeRadius(id) <= *bestDistanceSoFar)
+            return;
+
+        // Check if this cluster provides the best distance
+        if (pred(uncheckedCluster(id)))
+            if (d > *bestDistanceSoFar)
+            {
+                *bestDistanceSoFar = d;
+                *bestIdSoFar = id;
+            }
+
+        // Go over the daughters. It is more likely that more
+        // far away daughter will end up further away from the target.
+        const int ndaus = nDaughters(id);
+        for (int i=ndaus-1; i>=0; --i)
+            farthestDauOrSelf(target, daughterId(id,i), pred,
+                              bestDistanceSoFar, bestIdSoFar);
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    TreeNodeId AbsClusteringTree<Cluster,LevelInfo>::closestNonDescendant(
+        const TreeNodeId& idIn, const BooleanPredicate& pred,
+        double* distance) const
+    {
+        assert(distance);
+        *distance = DBL_MAX;
+        TreeNodeId bestId(badId);
+
+        // The following will verify that idIn.first is legal
+        const unsigned nclus = nClusters(idIn.first);
+
+        // Make sure that idIn.second is legal as well
+        assert(idIn.second < nclus);
+
+        if (nclus == 2)
+        {
+            TreeNodeId id(idIn.first, 1U - idIn.second);
+            closestDauOrSelf(idIn, id, pred, distance, &bestId);
+        }
+        else if (nclus > 2)
+        {
+            neigbors_.clear();
+            neigbors_.reserve(nclus - 1);
+            TreeNodeId id(idIn.first,0);
+            for (; id.second<nclus; ++id.second)
+                if (idIn.second != id.second)
+                {
+                    const double d = uncheckedClusterDistance(id, idIn);
+                    neigbors_.push_back(std::make_pair(d, id.second));
+                }
+            std::sort(neigbors_.begin(), neigbors_.end());
+            for (unsigned i=0; i<nclus-1; ++i)
+            {
+                id.second = neigbors_[i].second;
+                closestDauOrSelf(idIn, id, pred, distance, &bestId);
+            }
+        }
+
+        return bestId;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    double AbsClusteringTree<Cluster,LevelInfo>::conditionalNodeRadius(
+        const TreeNodeId& id, const BooleanPredicate& pred) const
+    {
+        TreeNodeId dummy(id);
+        double distance = 0.0;
+
+        const int ndaus = nDaughters(id);
+        for (int i=ndaus-1; i>=0; --i)
+            farthestDauOrSelf(id, daughterId(id,i), pred,
+                              &distance, &dummy);
+        return distance;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    TreeNodeId AbsClusteringTree<Cluster,LevelInfo>::closestDaughter(
+        const TreeNodeId& id) const
+    {
+        if (nDaughters(id))
+            return daughterId(id, 0);
+        else
+            return badId;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    bool AbsClusteringTree<Cluster,LevelInfo>::operator==(
+        const AbsClusteringTree& r) const
+    {
+        const unsigned nlevels = r.nLevels();
+        if (nlevels != nLevels())
+            return false;
+
+        for (unsigned lev=0; lev<nlevels; ++lev)
+        {
+            const double rscale = r.getScale(lev);
+            assert(rscale > 0.0);
+            const double scale = getScale(lev);
+            assert(scale > 0.0);
+            if (rscale != scale)
+                return false;
+
+            if (getLevel(scale) != r.getLevel(scale))
+                return false;
+
+            const unsigned nclus = r.nClusters(lev);
+            if (nclus != nClusters(lev))
+                return false;
+
+            // Compare the level info, but not for level 0
+            if (lev)
+                if (getLevelInfo(lev) != r.getLevelInfo(lev))
+                    return false;
+
+            // Compare individual clusters
+            TreeNodeId id(lev,0);
+            for (; id.second<nclus; ++id.second)
+            {
+                if (uncheckedCluster(id) != r.uncheckedCluster(id))
+                    return false;
+
+                if (parentId(id) != r.parentId(id))
+                    return false;
+
+                if (distanceToParent(id) != r.distanceToParent(id))
+                    return false;
+
+                if (closestDaughter(id) != r.closestDaughter(id))
+                    return false;
+
+                const unsigned ndaus = r.nDaughters(id);
+                if (ndaus != nDaughters(id))
+                    return false;
+
+                if (lev == 0)
+                {
+                    // Toplevel daughter ids should be compared as sets
+                    // because they do not have a natural sorting order
+                    // (distance to parent is not meaningful for them)
+                    std::set<TreeNodeId> set1, set2;
+                    for (unsigned idau=0; idau<ndaus; ++idau)
+                    {
+                        set1.insert(daughterId(id, idau));
+                        set2.insert(r.daughterId(id, idau));
+                    }
+                    if (set1 != set2)
+                        return false;
+                }
+                else
+                {
+                    // Compare daughter ids
+                    for (unsigned idau=0; idau<ndaus; ++idau)
+                        if (daughterId(id, idau) != r.daughterId(id, idau))
+                            return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    inline bool AbsClusteringTree<Cluster,LevelInfo>::operator!=(
+        const AbsClusteringTree& r) const
+    {
+        return !(*this == r);
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    inline void AbsClusteringTree<Cluster,LevelInfo>::clear()
+    {
+        for (unsigned i = nLevels()-1; i > 0; --i)
+            remove(i);
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    unsigned AbsClusteringTree<Cluster,LevelInfo>::nParentsWithDaus(
+        const unsigned level, const unsigned nMinDau) const
+    {
+        assert(level < nLevels());
+        unsigned count = 0;
+        TreeNodeId id(level,0);
+        const unsigned nclus = nClusters(level);
+        for (; id.second<nclus; ++id.second)
+            if (nDaughters(id) >= nMinDau)
+                ++count;
+        return count;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    unsigned AbsClusteringTree<Cluster,LevelInfo>::nRootDaughters(
+        const unsigned level) const
+    {
+        assert(level < nLevels());
+        unsigned nRootDaus = 0;
+        TreeNodeId id(level,0);
+        const TreeNodeId rootId(0,0);
+        const unsigned nclus = nClusters(level);
+        for (; id.second<nclus; ++id.second)
+            if (parentId(id) == rootId)
+                ++nRootDaus;
+        return nRootDaus;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    double AbsClusteringTree<Cluster,LevelInfo>::levelMatchDistance(
+        const unsigned daughterLevel) const
+    {
+        assert(daughterLevel < nLevels());
+        if (daughterLevel < 2)
+            return 0.0;
+
+        const unsigned parentLevel = daughterLevel - 1;
+        const unsigned nClusInParent = nClusters(parentLevel);
+        const unsigned nClusInDau = nClusters(daughterLevel);
+        const unsigned nSterileClus = nClusInParent - 
+            nParentsWithDaus(parentLevel, 1);
+
+        if (nClusInParent == nClusInDau && nSterileClus == 0)
+        {
+            // There is a one-to-one match between the clusters
+            // on these levels. This should be good enough.
+            return 0.0;
+        }
+
+        // Figure out the number of "strange" clusters. "Strange"
+        // clusters are:
+        //   1. Dau level: directly connected to the top node
+        //   2. Parent level: daughterless (sterile)
+        //   3. Parent level: more than 2 daughters
+        const double nStrange = nRootDaughters(daughterLevel) +
+            nSterileClus + nParentsWithDaus(parentLevel, 3);
+
+        // Return the ratio of the number of "strange" clusters
+        // to the total number of clusters under consideration
+        return nStrange/(nClusInParent + nClusInDau);
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    double AbsClusteringTree<Cluster,LevelInfo>::nextBestScale(
+        const double minRatioLog) const
+    {
+        double worstDistance = 0.0;
+        unsigned worstLevel = 0;
+
+        const unsigned nlevels = nLevels();
+        double previousScale = getScale(1);
+        for (unsigned ilev=2; ilev<nlevels; ++ilev)
+        {
+            const double scale = getScale(ilev);
+            if (log(previousScale/scale) > minRatioLog)
+            {
+                const double d = levelMatchDistance(ilev);
+                assert(d >= 0.0);
+                if (d > worstDistance)
+                {
+                    worstDistance = d;
+                    worstLevel = ilev;
+                }
+            }
+            previousScale = scale;
+        }
+
+        if (worstLevel)
+            return sqrt(getScale(worstLevel-1)*getScale(worstLevel));
+        else
+            return 0.0;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    bool AbsClusteringTree<Cluster,LevelInfo>::isScaleUsed(
+        const double scale) const
+    {
+        const unsigned nlevels = nLevels();
+        for (unsigned ilev = 1; ilev < nlevels; ++ilev)
+            if (getScale(ilev) == scale)
+                return true;
+        return false;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    void AbsClusteringTree<Cluster,LevelInfo>::getAllScales(
+        std::vector<double>* scales, const bool increasingOrder) const
+    {
+        assert(scales);
+        scales->clear();
+
+        const unsigned nlevels = nLevels();
+        if (nlevels > 1)
+        {
+            scales->reserve(nlevels - 1);
+            if (increasingOrder)
+                for (unsigned ilev = nlevels - 1; ilev; --ilev)
+                    scales->push_back(getScale(ilev));
+            else
+                for (unsigned ilev = 1; ilev < nlevels; ++ilev)
+                    scales->push_back(getScale(ilev));
+        }
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    unsigned AbsClusteringTree<Cluster,LevelInfo>::traceLifetime(
+        const TreeNodeId& id, const unsigned topLevel)
+    {
+        const unsigned ndaus = nDaughters(id);
+        if (ndaus == 0)
+            return id.first;
+
+        // Calculate lifetimes for all daughters other than the best.
+        // This should not happen very often: ndaus == 1 most of the times.
+        const TreeNodeId bestDau(closestDaughter(id));
+        if (ndaus > 1)
+            for (unsigned idau=0; idau<ndaus; ++idau)
+            {
+                const TreeNodeId dauId(daughterId(id, idau));
+                if (!(dauId == bestDau))
+                {
+                    const unsigned lolev = traceLifetime(dauId, dauId.first);
+                    const double hiscale = getScale(dauId.first);
+                    const double loscale = getScale(lolev);
+                   (const_cast<Cluster&>(uncheckedCluster(dauId))).setLifetime(
+                        log(hiscale/loscale));
+                }
+            }
+
+        // Calculate the lifetime for the best daughter
+        const unsigned lolev = traceLifetime(bestDau, topLevel);
+        const double hiscale = getScale(topLevel);
+        const double loscale = getScale(lolev);
+       (const_cast<Cluster&>(uncheckedCluster(bestDau))).setLifetime(
+           log(hiscale/loscale));
+
+        return lolev;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    void AbsClusteringTree<Cluster,LevelInfo>::calculateLifetimes()
+    {
+        // Root node does not have the "best" daughter
+        const TreeNodeId rootId(0,0);
+        const unsigned ndaus = nDaughters(rootId);
+        for (unsigned idau=0; idau<ndaus; ++idau)
+        {
+            const TreeNodeId dauId(daughterId(rootId, idau));
+            const unsigned lowestLevel = traceLifetime(dauId, dauId.first);
+            const double hiscale = getScale(dauId.first);
+            const double loscale = getScale(lowestLevel);
+           (const_cast<Cluster&>(uncheckedCluster(dauId))).setLifetime(
+               log(hiscale/loscale));
+        }
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    void AbsClusteringTree<Cluster,LevelInfo>::calculateDriftSpeeds()
+    {
+        const double invalidSpeed = -2.0;
+        const unsigned nlevels = nLevels();
+        const TreeNodeId rootId(0,0);
+
+        if (nlevels < 2)
+        {
+            // The tree is empty, we have the root level only
+            return;
+        }
+        else if (nlevels == 2)
+        {
+            // Only one level of cluster data.
+            // Can't create any useful drift speed info.
+            const unsigned nclus = nClusters(1);
+            TreeNodeId id(1,0);
+            for (; id.second<nclus; ++id.second)
+                (const_cast<Cluster&>(uncheckedCluster(id))).setDriftSpeed(
+                    invalidSpeed);
+        }
+        else
+        {
+            // More than one level of cluster data.
+            // Process normally.
+            for (unsigned ilev=1; ilev<nlevels; ++ilev)
+            {
+                const unsigned nclus = nClusters(ilev);
+                TreeNodeId id(ilev,0);
+                for (; id.second<nclus; ++id.second)
+                {
+                    const TreeNodeId parId = parentId(id);
+                    const TreeNodeId dauId = closestDaughter(id);
+                    double speed = invalidSpeed, d = 0.0;
+                    double hiscale = -1.0, loscale = 0.0;
+
+                    if (parId != rootId && dauId != badId)
+                    {
+                        d = distanceToParent(dauId) + distanceToParent(id);
+                        hiscale = getScale(parId.first);
+                        loscale = getScale(dauId.first);
+                    }
+                    else if (parId == rootId && dauId != badId)
+                    {
+                        d = distanceToParent(dauId);
+                        hiscale = getScale(id.first);
+                        loscale = getScale(dauId.first);
+                    }
+                    else if (parId != rootId && dauId == badId)
+                    {
+                        d = distanceToParent(id);
+                        hiscale = getScale(parId.first);
+                        loscale = getScale(id.first);
+                    }
+
+                    if (hiscale > 0.0)
+                    {
+                        assert(loscale > 0.0);
+                        assert(hiscale > loscale);
+                        speed = d/log(hiscale/loscale);
+                    }
+                   (const_cast<Cluster&>(uncheckedCluster(id))).setDriftSpeed(
+                        speed);
+                }
+            }
+        }
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    void AbsClusteringTree<Cluster,LevelInfo>::calculateMagnitudeSpeeds()
+    {
+        const double invalidSpeed = -6.0;
+        const unsigned nlevels = nLevels();
+        const TreeNodeId rootId(0,0);
+
+        if (nlevels < 2)
+        {
+            // The tree is empty, we have the root level only
+            return;
+        }
+        else if (nlevels == 2)
+        {
+            // Only one level of cluster data.
+            // Can't create any useful drift speed info.
+            const unsigned nclus = nClusters(1);
+            TreeNodeId id(1,0);
+            for (; id.second<nclus; ++id.second)
+               (const_cast<Cluster&>(uncheckedCluster(id))).setMagSpeed(
+                   invalidSpeed);
+        }
+        else
+        {
+            // More than one level of cluster data.
+            // Process normally.
+            for (unsigned ilev=1; ilev<nlevels; ++ilev)
+            {
+                const unsigned nclus = nClusters(ilev);
+                TreeNodeId id(ilev,0);
+                for (; id.second<nclus; ++id.second)
+                {
+                    const TreeNodeId parId = parentId(id);
+                    const TreeNodeId dauId = closestDaughter(id);
+                    double speed = invalidSpeed, d = 0.0;
+                    double hiscale = -1.0, loscale = 0.0;
+
+                    if (parId != rootId && dauId != badId)
+                    {
+                        d = uncheckedCluster(parId).magnitude()/
+                            uncheckedCluster(dauId).magnitude();
+                        hiscale = getScale(parId.first);
+                        loscale = getScale(dauId.first);
+                    }
+                    else if (parId == rootId && dauId != badId)
+                    {
+                        d = uncheckedCluster(id).magnitude()/
+                            uncheckedCluster(dauId).magnitude();
+                        hiscale = getScale(id.first);
+                        loscale = getScale(dauId.first);
+                    }
+                    else if (parId != rootId && dauId == badId)
+                    {
+                        d = uncheckedCluster(parId).magnitude()/
+                            uncheckedCluster(id).magnitude();
+                        hiscale = getScale(parId.first);
+                        loscale = getScale(id.first);
+                    }
+
+                    if (hiscale > 0.0)
+                    {
+                        assert(loscale > 0.0);
+                        assert(hiscale > loscale);
+                        assert(d > 0.0);
+                        speed = log(d)/log(hiscale/loscale);
+                    }
+                   (const_cast<Cluster&>(uncheckedCluster(id))).setMagSpeed(
+                       speed);
+                }
+            }
+        }
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    void AbsClusteringTree<Cluster,LevelInfo>::updateClusterRadiusInfo()
+    {
+        const unsigned maxlevel = nLevels() - 1U;
+        for (unsigned ilev=1; ilev<maxlevel; ++ilev)
+        {
+            const unsigned nclus = nClusters(ilev);
+            TreeNodeId id(ilev,0);
+            for (; id.second<nclus; ++id.second)
+                (const_cast<Cluster&>(
+                     uncheckedCluster(id))).setClusterRadius(nodeRadius(id));
+        }
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    void AbsClusteringTree<Cluster,LevelInfo>::updateClusterSeparationInfo(
+        const double failDistance)
+    {
+        double distance;
+        Always<true,Cluster> allPass;
+        const unsigned maxlevel = nLevels() - 1U;
+        for (unsigned ilev=1; ilev<maxlevel; ++ilev)
+        {
+            const unsigned nclus = nClusters(ilev);
+            TreeNodeId id(ilev,0);
+            for (; id.second<nclus; ++id.second)
+            {
+                closestNonDescendant(id, allPass, &distance);
+                if (distance == DBL_MAX)
+                    distance = failDistance;
+                (const_cast<Cluster&>(
+                     uncheckedCluster(id))).setClusterSeparation(distance);
+            }
+        }
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    void AbsClusteringTree<Cluster,LevelInfo>::calculateNearestNeighbors(
+        const double noNeighborDistance)
+    {
+        double distance;
+        Always<true,Cluster> allPass;
+        const unsigned nlevels = nLevels();
+        for (unsigned ilev=1; ilev<nlevels; ++ilev)
+        {
+            const unsigned nclus = nClusters(ilev);
+            TreeNodeId id(ilev,0);
+            for (; id.second<nclus; ++id.second)
+            {
+                closestNeighbor(id, allPass, &distance);
+                if (distance == DBL_MAX)
+                    distance = noNeighborDistance;
+                (const_cast<Cluster&>(
+                     uncheckedCluster(id))).setNearestNeighborDistance(
+                         distance);
+            }
+        }
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    void AbsClusteringTree<Cluster,LevelInfo>::getPassingNodes(
+        const unsigned level, const BooleanPredicate& pred,
+        std::vector<TreeNodeId>* nodesToFill) const
+    {
+        assert(level < nLevels());
+        nodesToFill->clear();
+        TreeNodeId id(level,0);
+        const unsigned nclus = nClusters(level);
+        for (; id.second<nclus; ++id.second)
+            if (pred(uncheckedCluster(id)))
+                nodesToFill->push_back(id);
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    unsigned AbsClusteringTree<Cluster,LevelInfo>::clusterCount(
+        const unsigned level, const BooleanPredicate& pred) const
+    {
+        assert(level < nLevels());
+        const unsigned nclus = nClusters(level);
+        unsigned count = 0;
+        TreeNodeId id(level,0);
+        for (; id.second<nclus; ++id.second)
+            if (pred(uncheckedCluster(id)))
+                ++count;
+        return count;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    void AbsClusteringTree<Cluster,LevelInfo>::occupancyInScaleSpace(
+        const BooleanPredicate& pred,
+        std::vector<unsigned>* occupancy) const
+    {
+        assert(occupancy);
+        occupancy->clear();
+        const unsigned n = nLevels();
+        occupancy->reserve(n);
+        occupancy->push_back(1U);
+        for (unsigned i=1; i<n; ++i)
+            occupancy->push_back(clusterCount(i, pred));
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    int AbsClusteringTree<Cluster,LevelInfo>::heritageLine(
+        const TreeNodeId& idIn, const BooleanPredicate& pred,
+        const double maxDistance, std::vector<Cluster>* clustersToFill) const
+    {
+        clustersToFill->clear();
+        if (!pred(getCluster(idIn)))
+            return -1;
+
+        // Find the topmost parent which satisfies the criteria
+        // and to which we have an access through the first daughter
+        // sequence
+        unsigned nup = 0;
+        TreeNodeId topmost = idIn;
+        for (TreeNodeId parId = parentId(idIn);
+             parId.first != 0 && parId != badId;
+             parId = parentId(parId))
+        {
+            const double d = uncheckedClusterDistance(parId, idIn);
+            if (d > maxDistance)
+                break;
+            if (closestDaughter(parId) != topmost)
+                break;
+            if (!pred(uncheckedCluster(parId)))
+                break;
+            topmost = parId;
+            ++nup;
+        }
+
+        // Find the lowest daughter which satisfies the criteria
+        // and to which we have an access through the first daughter
+        // sequence
+        unsigned ndown = 0;
+        TreeNodeId lowest = idIn;
+        for (TreeNodeId dauId = closestDaughter(idIn);
+             dauId != badId; dauId = closestDaughter(dauId))
+        {
+            const double d = uncheckedClusterDistance(dauId, idIn);
+            if (d > maxDistance)
+                break;
+            if (!pred(uncheckedCluster(dauId)))
+                break;
+            lowest = dauId;
+            ++ndown;
+        }
+
+        // Form the sequence of clusters
+        clustersToFill->reserve(nup + ndown + 1);
+        if (nup || ndown)
+        {
+            TreeNodeId id = topmost;
+            clustersToFill->push_back(uncheckedCluster(id));
+            do {
+                id = closestDaughter(id);
+                clustersToFill->push_back(uncheckedCluster(id));
+            } while (id != lowest);
+        }
+        else
+            clustersToFill->push_back(uncheckedCluster(idIn));
+
+        return nup;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<typename PropertySelector, class BooleanPredicate>
+    void AbsClusteringTree<Cluster,LevelInfo>::clusterStats(
+        const unsigned level, const PropertySelector& property,
+        const BooleanPredicate& pred, StatAccumulator* acc) const
+    {
+        assert(level < nLevels());
+        acc->reset();
+        const unsigned nclus = nClusters(level);
+        TreeNodeId id(level,0);
+        for (; id.second<nclus; ++id.second)
+        {
+            const Cluster& clu(uncheckedCluster(id));
+            if (pred(clu))
+                acc->accumulate(property(clu));
+        }
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    bool AbsClusteringTree<Cluster,LevelInfo>::clusterCountLevels(
+        const unsigned requestedCount, const BooleanPredicate& pred,
+        unsigned* minLevel, unsigned* maxLevel) const
+    {
+        assert(minLevel);
+        assert(maxLevel);
+
+        *minLevel = 0;
+        *maxLevel = 0;
+        bool status = false;
+
+        const unsigned nl = nLevels();
+        for (unsigned level = 1; level < nl; ++level)
+            if (clusterCount(level, pred) == requestedCount)
+            {
+                if (*minLevel == 0)
+                {
+                    // This is the first time the requested number
+                    // of clusters is encountered
+                    *minLevel = level;
+                    status = true;
+                }
+                else
+                {
+                    // Not the first time. We need to reset
+                    // the status to "false" if the sequence
+                    // is not continuous.
+                    if (*maxLevel != level - 1)
+                        status = false;
+                }
+                *maxLevel = level;
+            }
+
+        return status;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    template<class BooleanPredicate>
+    unsigned AbsClusteringTree<Cluster,LevelInfo>::stableClusterCount(
+        const BooleanPredicate& pred,
+        unsigned* minLevel, unsigned* maxLevel,
+        const double alpha,
+        const unsigned minStartingLevel,
+        const unsigned maxStartingLevel) const
+    {
+        assert(minLevel);
+        assert(maxLevel);
+
+        *minLevel = 0;
+        *maxLevel = 0;
+        unsigned bestN = 0;
+        double bestStability = 0.0;
+
+        const unsigned lmin = minStartingLevel > 0 ? minStartingLevel : 1;
+        const unsigned nm1 = nLevels() - 1;
+        const unsigned lmax = maxStartingLevel < nm1 ? maxStartingLevel : nm1;
+
+        unsigned oldN = clusterCount(lmin, pred);
+        double oldScale = getScale(lmin);
+        unsigned oldMinLevel = lmin;
+
+        for (unsigned level = lmin+1; level <= lmax; ++level)
+        {
+            const double newScale = getScale(level);
+            const unsigned N = clusterCount(level, pred);
+            if (N == oldN)
+            {
+                const double stability = N ? pow(N,alpha)*fabs(
+                    log(oldScale/newScale)) : 0.0;
+                if (stability > bestStability)
+                {
+                    bestN = N;
+                    bestStability = stability;
+                    *minLevel = oldMinLevel;
+                    *maxLevel = level;
+                }
+            }
+            else
+            {
+                oldN = N;
+                oldScale = newScale;
+                oldMinLevel = level;
+            }
+        }
+
+        return bestN;
+    }
+
+    template<typename Cluster, typename LevelInfo>
+    bool AbsClusteringTree<Cluster,LevelInfo>::isAncestor(
+        const TreeNodeId& id1, const TreeNodeId& id2) const
+    {
+        const unsigned level1 = id1.first;
+        const unsigned index1 = id1.second;
+
+        for (TreeNodeId parent = parentId(id2);
+             parent.first >= level1 && parent.first != UINT_MAX;
+             parent = parentId(parent))
+            if (parent.first == level1 && parent.second == index1)
+                return true;
+
+        return false;
+    }
+}

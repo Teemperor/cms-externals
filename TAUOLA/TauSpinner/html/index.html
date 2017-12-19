@@ -1,0 +1,333 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>TauSpinner project</title>
+  <link rel="stylesheet" href="style.css" type="text/css" />
+</head>
+
+<body topmargin="0" leftmargin="0" rightmargin="0" bottommargin="0">
+
+<!-- TOP MENU -->
+<table class="up" width="100%" height="30px">
+  <tr>
+    <td align=center>
+      <text>
+        <a href="http://wasm.home.cern.ch/wasm/">Z. Was homepage</a> |
+	Z. Czyczula e-mail: Zofia.Czyczula (at) cern.ch |
+        <a href="http://hibiscus.if.uj.edu.pl/~przedzinski/homepage/">T. Przedzinski hompege</a>
+      </text>
+    </td>
+  </tr>
+</table>
+
+<br>
+
+<!-- PROJECT INFO -->
+
+<table valign="center" align="center" bgcolor="#ebebeb" cellpadding="0" cellspacing="0" >
+  <tr>
+    <td>
+      <table class=info width="800px" bgcolor="#fffffff" align="center" >
+        <tr>
+          <td width=600px>
+          <text>
+
+          <p align=center>
+	    <br>
+            <br>
+            <font size="6">
+              As of 2012-07-25 TauSpinner is merged with Tauola++,
+              for further develpments check <a href="http://www.ph.unimelb.edu.au/~ndavidson/tauola/doxygen/">Tauola++ website</a>.
+              <br>
+              <br>
+              This website will no longer be updated
+            </font>
+            <br>
+            <br>
+          </p>
+          <p>
+            <b>TauSpinner: tau spin reweight algorithm</b><br>
+             Authors: Z. Czyczula, T. Przedzinski, Z. Was
+          </p>
+          <br>
+          <b>PHYSICS PURPOSE:</b><br>
+
+           For previously generated sample involving tau, its spin effects can be:
+
+          <OL>
+            <LI> validated. Eg. if spin effects were taken into account when events were generated
+            <LI> calculate spin weght for previously generated events and stored on the tape.
+            <UL>
+              <LI> In original sample spin effects could have been missing. <br>
+                   Then spin weight will be in range (0 , 2<sup>n</sup>); <br>
+                   n denotes number of taus in final state.
+	      <LI> In original sample spin effects are eg for W+ and we would like to see how it would look 
+                   if H+ was present instead.
+            </UL>
+            <LI> reweight on flight such events with spin weight. Such unweighted events can be then
+                 monitored with MC-Tester for quick evaluation of spin effects
+          </OL>
+
+          At present only nine main decay channels of tau have their spin effects used in algorithm. <br>
+          These channels cover already now above 95% of total tau width. <br>
+          <br>
+          For more information on agorithm use see <a href="downloads/release/README">README</a><br>
+          (This README is included in distribution tarball as well) <br>
+
+          <br>
+          <br>
+          <p align=center>
+            <font size="6">
+              The most up-to-date version is available from
+              <br> <a href="http://www.ph.unimelb.edu.au/~ndavidson/tauola/doxygen/">Tauola++ website</a>
+            </font>
+          </p>
+          <br>
+          <br>
+          
+          <p><b>DOWNLOAD: version 1.0 (as of 07.Dec.11)</b></p>
+          <text>
+          <UL>
+            <LI> <a href="downloads/release/TauSpiner.v1.0.tgz">Source code</a>
+            <LI> <a href="downloads/release/svn_tag.txt">SVN tag</a>
+            <LI> <a href="downloads/release/changelog.txt">changelog</a>
+            <br> <br>
+            <LI> <a href="http://arxiv.org/abs/arXiv:1201.0117">Preprint in Archive.</a>
+          </UL>
+
+          <br><br>
+          <p><b>Development version</b></p>
+          <text>
+          <UL>
+            <LI> <a href="downloads/dev/TauSpinner-DEV.tgz">Source code</a>
+            <LI> <a href="downloads/dev/svn_tag.txt">SVN tag</a>
+            <LI> <a href="downloads/dev/changelog.txt">changelog</a>
+	    <br> <br>
+	    <LI> <a href="http://annapurna.ifj.edu.pl/~wasm/TauSpinNote.pdf">Draft of the updated version of the paper.</a>
+          </UL>
+          </text>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<br>
+
+<!-- OTHER LINKS -->
+
+<table width=800px bgcolor="#ebebeb" cellpadding="0" cellspacing="0" align="center">
+  <tr>
+    <td>
+      <table class=info width="800px" bgcolor="#fffffff" align="center">
+        <tr>
+          <td>
+          <p><b>QUICK LOOK AT SUBDIRECTORIES, NUMERICAL RESULTS AND OLD VERSIONS:</b></p>
+          <text>
+          <UL>
+            <LI> <a href="TauSpiner.v1.0">Online source code</a>
+              of the last version
+            <LI> <a href="results">Numerical results</a> obtained using <a href="http://mc-tester.web.cern.ch/MC-TESTER/">MC-TESTER</a>
+            <LI> <a href="MC-tester-analysis">MC-tester-analysis</a> contains an
+              example how to run MC-tester analysis step on lxplus as well as several
+              root files used for creating booklets stored in directory 'results'.
+              See 'README' in this directory for more details. Tarball with analysis files
+              only can be downloaded <a href="downloads/analysis.tgz">here</a>.
+            <LI> <a href="attic">Old versions of the distribution tar ball </a> also
+              some older  test results
+          </UL>
+          </text>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<br>
+
+<!-- HARD PROCESSES LIST -->
+
+<table width=800px bgcolor="#ebebeb" cellpadding="0" cellspacing="0" align="center">
+  <tr>
+    <td>
+      <table class=info width="800px" bgcolor="#fffffff" align="center">
+        <tr>
+          <td colspan=2>
+            <p><b><font size=2> LIST OF HARD PROCESSES:</font></b></p>
+          </td>
+        </tr>
+        <tr>
+          <td>
+          <font size=2>
+
+          <UL>
+            <center><b>*</b></center>
+            <LI> W^- &rarr tau^- nu_tau 
+            <LI> W^+ &rarr tau^+ nu_tau
+
+           <center><b>*</b></center>
+            <LI> H^- &rarr tau^- nu_tau 
+            <LI> H^+ &rarr tau^+ nu_tau
+
+          </font>
+          </td>
+
+          <td>
+          <font size=2>
+
+            <center><b>*</b></center>
+            <LI> gamma^* &rarr tau^+ tau^-
+            <LI> Z       &rarr tau^+ tau^-
+
+            <center><b>*</b></center>
+            <LI> h &rarr tau^+ tau^-
+            <LI> a &rarr tau^+ tau^-
+
+          </font>
+          </UL>
+          </td>
+          </font>
+        </tr>
+        <tr>
+          <td colspan=2>
+            <br>
+            Partial kinematical information is used (4 momenta of taus and their parent only). <br>
+            Only longitudinal spin effects. <br>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<br>
+
+<!-- DECAY CHANNELS LIST -->
+
+<table width=800px bgcolor="#ebebeb" cellpadding="0" cellspacing="0" align="center">
+  <tr>
+    <td>
+      <table class=info width="800px" bgcolor="#fffffff" align="center">
+        <tr>
+          <td colspan=2>
+            <p><b><font size=2> LIST OF TAU DECAY CHANNELS WHEN SPIN EFFECTS ARE TAKEN:</font></b></p>
+          </td>
+        </tr>
+        <tr>
+          <td>
+          <font size=2>
+
+          <UL>
+            <center><b>1</b></center>
+            <LI>    tau^- &rarr e^- anti_nu_e      nu_tau [+ gamma]
+            <LI>    tau^+ &rarr e^+      nu_e anti_nu_tau [+ gamma]
+
+            <br><center><b>2</b></center>
+            <LI>    tau^- &rarr mu^- anti_nu_mu      nu_tau [+ gamma]
+            <LI>    tau^+ &rarr mu^+      nu_mu anti_nu_tau [+ gamma]
+
+            <br><center><b>3</b></center>
+            <LI>    tau^- &rarr pi^- nu_tau
+            <LI>    tau^+ &rarr pi^+ anti_nu_tau
+
+            <br><center><b>4</b></center>
+            <LI>    tau^- &rarr pi^- pi^0 nu_tau
+            <LI>    tau^+ &rarr pi^+ pi^0 anti_nu_tau
+
+            <br><center><b>5</b></center>
+            <LI>    tau^- &rarr pi^- pi^0 pi^0 nu_tau
+            <LI>    tau^+ &rarr pi^+ pi^0 pi^0 anti_nu_tau
+            <br><br>
+            <LI>    tau^- &rarr pi^- pi^- pi^+ nu_tau
+            <LI>    tau^+ &rarr pi^+ pi^+ pi^- anti_nu_tau
+
+          </font>
+          </td>
+
+          <td>
+          <font size=2>
+
+            <center><b>6</b></center>
+            <LI>    tau^- &rarr K^-  nu_tau
+            <LI>    tau^+ &rarr K^+  anti_nu_tau
+
+            <br><center><b>7</b></center>
+            <LI>    tau^- &rarr K^-  pi^0 nu_tau
+            <LI>    tau^+ &rarr K^+  pi^0 anti_nu_tau
+            <br><br>
+            <LI>    tau^- &rarr pi^- K_S0 nu_tau
+            <LI>    tau^+ &rarr pi^+ K_S0 anti_nu_tau
+            <br><br>
+            <LI>    tau^- &rarr pi^- K_L0 nu_tau
+            <LI>    tau^+ &rarr pi^+ K_L0 anti_nu_tau
+
+            <br><center><b>8</b></center>
+            <LI>    tau^- &rarr pi^- pi^- pi^+ pi^0 nu_tau
+            <LI>    tau^+ &rarr pi^+ pi^+ pi^- pi^0 anti_nu_tau
+
+            <br><center><b>9</b></center>
+            <LI>    tau^- &rarr pi^0 pi^0 pi^0 pi^- nu_tau
+            <LI>    tau^+ &rarr pi^0 pi^0 pi^0 pi^+ anti_nu_tau
+
+          </font>
+          </UL>
+          </td>
+        </tr>
+        <tr>
+          <td colspan=2>
+            <br>
+            For other channels spin weight  at present will not be calculated. 1.0 will be returned.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<br>
+
+<!-- ACKNOWLEDGMENTS -->
+
+<table valign="center" align="center" bgcolor="#ebebeb" cellpadding="0" cellspacing="0" >
+  <tr>
+    <td>
+      <table class=info width="800px" bgcolor="#fffffff" align="center" >
+        <tr>
+          <td width=600px>
+          <text>
+
+          <p><b>ACKNOWLEDGMENTS:</b></p><br>
+
+          The first functional version of this algorithm was created on inspiration and with help from
+          Dimitris Varouchas, Claire Gwenlan, Soshi Tsuno, Andy Buckley, Elzbieta Richter-Was and other members of ATLAS MC group.
+
+          <p><b>USER INPUT OUTPUT METHODS; FURTHER PARTICIPATION NEEDED:</b></p><br>
+
+          We need help from pilot users. In particular methods to read events
+          stored in formats used in experiments MC simulations need to be
+          prepared.
+
+          </text>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<br>
+
+<!-- BOTTOM INFORMATION -->
+
+<table class="down" width="100%" height="30px">
+  <tr bgcolor=#6b7f91>
+    <td align="center">
+      <b>Last update: 19 November 2012</b>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

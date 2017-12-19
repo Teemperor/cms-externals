@@ -1,0 +1,10 @@
+Our configuation scripts are not prepared to work for CP-examples 
+with LCG library version of Tauola and TauSpinner. This is possible 
+and reasonably straigtforward, but not necessarily very practical 
+because of compiles/version dependencies for 
+root, mc-tester, hepmc libraries.
+
+The following aspects need to be kept in mind (detailed
+instruction will be provided on the basis of pilot users experience):
+
+

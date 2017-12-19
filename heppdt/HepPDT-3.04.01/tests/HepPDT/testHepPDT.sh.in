@@ -1,0 +1,40 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f testHepPDT.out testHepPDTtable.out testHepPDTfragment.out testHepPDTstatus.out
+
+./testHepPDT@EXEEXT@ < testHepPDT.input 
+
+if ( ! `sed 's/e-0\([0-9][0-9]\)/e-\1/g' testHepPDT.out | \
+  sed 's/e+0\([0-9][0-9]\)/e+\1/g'  | \
+  @DIFF_Q@ - @srcdir@/testHepPDT.output > /dev/null` )
+then
+  echo "testHepPDT.out and @srcdir@/testHepPDT.output differ"
+  exit 1;
+fi
+
+if ( ! `sed 's/e-0\([0-9][0-9]\)/e-\1/g' testHepPDTtable.out | \
+  sed 's/e+0\([0-9][0-9]\)/e+\1/g'  | \
+  @DIFF_Q@ - @srcdir@/testHepPDTtable.output > /dev/null` )
+then
+  echo "testHepPDTtable.out and @srcdir@/testHepPDTtable.output differ"
+  exit 1;
+fi
+
+if ( ! `sed 's/e-0\([0-9][0-9]\)/e-\1/g' testHepPDTfragment.out | \
+  sed 's/e+0\([0-9][0-9]\)/e+\1/g'  | \
+  @DIFF_Q@ - @srcdir@/testHepPDTfragment.output > /dev/null` )
+then
+  echo "testHepPDTfragment.out and @srcdir@/testHepPDTfragment.output differ"
+  exit 1;
+fi
+
+if ( ! `sed 's/e-0\([0-9][0-9]\)/e-\1/g' testHepPDTstatus.out | \
+  sed 's/e+0\([0-9][0-9]\)/e+\1/g'  | \
+  @DIFF_Q@ - @srcdir@/testHepPDTstatus.output > /dev/null` )
+then
+  echo "testHepPDTstatus.out and @srcdir@/testHepPDTstatus.output differ"
+  exit 1;
+fi
+
+exit 0;

@@ -1,0 +1,223 @@
+#include <cstring>
+#include <cmath>
+
+namespace fftjet {
+    template<typename Real, typename Complex, class Plan>
+    FFTWEngine<Real,Complex,Plan>::FFTWEngine(
+        const unsigned nEta, const unsigned nPhi)
+        : B(nEta, nPhi), nReal_(nEta*nPhi), nComplex_(nEta*(nPhi/2 + 1))
+    {
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::transformForward(
+        const Real* from, Complex* to) const
+    {
+        assert(from);
+        assert(to);
+        for (unsigned i=0; i<nReal_; ++i)
+            in[i] = from[i];
+        engineExecute(pf);
+        memcpy(to, out, nComplex_*sizeof(Complex));
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::transformBack(
+        const Complex* from, Real* to) const
+    {
+        assert(from);
+        assert(to);
+        memcpy(out, from, nComplex_*sizeof(Complex));
+        engineExecute(pb);
+        const Real fn2 = nReal_;
+        for (unsigned i=0; i<nReal_; ++i)
+            to[i] = in[i]/fn2;
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::multiplyTransforms(
+        const Complex* l, const Complex* r, Complex* res) const
+    {
+        assert(l);
+        assert(r);
+        assert(res);
+        Real tmp;
+        for (unsigned i=0; i<nComplex_; ++i)
+        {
+            tmp = l[i][0]*r[i][1] + l[i][1]*r[i][0];
+            res[i][0] = l[i][0]*r[i][0] - l[i][1]*r[i][1];
+            res[i][1] = tmp;
+        }
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::divideTransforms(
+        const Complex* l, const Complex* r, Complex* res) const
+    {
+        assert(l);
+        assert(r);
+        assert(res);
+        Real tmp, asq;
+        for (unsigned i=0; i<nComplex_; ++i)
+        {
+            asq = r[i][0]*r[i][0] + r[i][1]*r[i][1];
+            assert(asq);
+            tmp = (l[i][1]*r[i][0] - l[i][0]*r[i][1])/asq;
+            res[i][0] = (l[i][0]*r[i][0] + l[i][1]*r[i][1])/asq;
+            res[i][1] = tmp;
+        }
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::deconvolutionRatio(
+        const Complex* l, const Complex* r, Complex* res) const
+    {
+        assert(l);
+        assert(r);
+        assert(res);
+        const Real zero = static_cast<Real>(0);
+        Real tmp, asq;
+        for (unsigned i=0; i<nComplex_; ++i)
+        {
+            asq = r[i][0]*r[i][0] + r[i][1]*r[i][1];
+            if (asq == zero)
+            {
+                Real bsq = l[i][0]*l[i][0] + l[i][1]*l[i][1];
+                if (bsq == zero)
+                {
+                    res[i][0] = zero;
+                    res[i][1] = zero;
+                }
+                else
+                    assert(!"Complex division by zero");
+            }
+            else
+            {
+                tmp = (l[i][1]*r[i][0] - l[i][0]*r[i][1])/asq;
+                res[i][0] = (l[i][0]*r[i][0] + l[i][1]*r[i][1])/asq;
+                res[i][1] = tmp;
+            }
+        }
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::addTransforms(
+        const Complex* l, const Complex* r, Complex* res) const
+    {
+        assert(l);
+        assert(r);
+        assert(res);
+        for (unsigned i=0; i<nComplex_; ++i)
+        {
+            res[i][0] = l[i][0] + r[i][0];
+            res[i][1] = l[i][1] + r[i][1];
+        }
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::subtractTransforms(
+        const Complex* l, const Complex* r, Complex* res) const
+    {
+        assert(l);
+        assert(r);
+        assert(res);
+        for (unsigned i=0; i<nComplex_; ++i)
+        {
+            res[i][0] = l[i][0] - r[i][0];
+            res[i][1] = l[i][1] - r[i][1];
+        }
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::amplitudeSquared(
+        const Complex* a, Complex* res) const
+    {
+        assert(a);
+        assert(res);
+        for (unsigned i=0; i<nComplex_; ++i)
+        {
+            res[i][0] = a[i][0]*a[i][0] + a[i][1]*a[i][1];
+            res[i][1] = 0.0;
+        }
+    }
+
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::scaleTransform(
+        const Complex* a, const Real scale, Complex* res) const
+    {
+        assert(a);
+        assert(res);
+        for (unsigned i=0; i<nComplex_; ++i)
+        {
+            res[i][0] = a[i][0]*scale;
+            res[i][1] = a[i][1]*scale;
+        }
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    double FFTWEngine<Real,Complex,Plan>::totalPower(const Complex* a) const
+    {
+        assert(a);
+        const unsigned physNPhi(B::nPhi_/2 + 1);
+        long double sum = 0.0L;
+        for (unsigned iEta=0; iEta<B::nEta_; ++iEta)
+            for (unsigned iph=0; iph<B::nPhi_; ++iph)
+            {
+                const unsigned iPhi = iph >= physNPhi ? B::nPhi_ - iph : iph;
+                const unsigned idx(iEta*physNPhi + iPhi);
+                sum += (a[idx][0]*a[idx][0] + a[idx][1]*a[idx][1]);
+            }
+        return static_cast<double>(sum);
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::setToReal(Complex* res, Real v) const
+    {
+        assert(res);
+        for (unsigned i=0; i<nComplex_; ++i)
+        {
+            res[i][0] = v;
+            res[i][1] = 0;
+        }
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::setTransformPoint(
+        Complex* points, const  unsigned iEta, unsigned iPhi,
+        const std::complex<double>& value) const
+    {
+        const unsigned physNPhi(B::nPhi_/2 + 1);
+        iPhi %= B::nPhi_;
+        if (iPhi >= physNPhi)
+            iPhi = B::nPhi_ - iPhi;
+        const unsigned idx((iEta % B::nEta_)*physNPhi + iPhi);
+        points[idx][0] = static_cast<Real>(value.real());
+        points[idx][1] = static_cast<Real>(value.imag());
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    std::complex<double> FFTWEngine<Real,Complex,Plan>::getTransformPoint(
+        const Complex* points, const unsigned iEta, unsigned iPhi) const
+    {
+        const unsigned physNPhi(B::nPhi_/2 + 1);
+        iPhi %= B::nPhi_;
+        if (iPhi >= physNPhi)
+            iPhi = B::nPhi_ - iPhi;
+        const unsigned idx((iEta % B::nEta_)*physNPhi + iPhi);
+        return std::complex<double>(points[idx][0], points[idx][1]);
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    Complex* FFTWEngine<Real,Complex,Plan>::allocateComplex() const
+    {
+        return static_cast<Complex *>(
+            engineMalloc(nComplex_ * sizeof(Complex)));
+    }
+
+    template<typename Real, typename Complex, class Plan>
+    void FFTWEngine<Real,Complex,Plan>::destroyComplex(Complex* p) const
+    {
+        if (p) engineFree(p);
+    }
+}

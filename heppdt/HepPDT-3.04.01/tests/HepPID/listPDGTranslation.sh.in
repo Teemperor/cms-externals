@@ -1,0 +1,14 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f listPDGTranslation.out
+
+./listPDGTranslation@EXEEXT@ 
+
+cmd=`@DIFF_Q@ listPDGTranslation.out @srcdir@/listPDGTranslation.output`
+
+if [ -n "$cmd" ]; then
+  echo "listPDGTranslation.out and @srcdir@/listPDGTranslation.output differ"
+  exit 1;
+fi
+

@@ -1,0 +1,30 @@
+#include <cassert>
+
+namespace fftjet {
+    template <typename Real>
+    LinearInterpolator1d::LinearInterpolator1d(
+        const Real* idata, const unsigned inpoints,
+        const double ixmin, const double xmax,
+        const double iflow, const double ifhi)
+        : cdf(0),
+          xmin(ixmin),
+          flow(iflow),
+          fhi(ifhi),
+          npoints(inpoints)
+    {
+        assert(idata);
+        assert(npoints > 1);
+        assert(xmin < xmax);
+
+        data = new double[npoints];
+        for (unsigned i=0; i<npoints; ++i)
+            data[i] = idata[i];
+        binwidth = (xmax - xmin)/npoints;
+    }
+
+    inline LinearInterpolator1d::~LinearInterpolator1d()
+    {
+        delete [] data;
+        delete [] cdf;
+    }
+}

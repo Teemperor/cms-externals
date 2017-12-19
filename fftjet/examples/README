@@ -1,0 +1,95 @@
+
+This directory contains several programs which illustrate the usage of
+the FFTJet package:
+
+estimateFFTNoise   -- (in file estimateFFTNoise.cc). A simple program
+                      which illustrates selection of the magnitude cutoff
+                      for the FFTJet peak finder. A reasonable non-zero
+                      cutoff has to be provided so that the peak finder
+                      ignores peaks produced due to the round-off noise
+                      of the DFFT calculations.
+
+singleScaleExample -- (in file singleScaleExample.cc). This program
+                      illustrates the usage of the FFTJet package for
+                      reconstructing jets at a single resolution scale.
+                      Gaussian kernel is used for pattern recognition,
+                      and a simple elliptical cone cluster membership
+                      function is used for jet energy recombination
+                      in the "crisp" mode.
+
+multiScaleExample  -- (in file multiScaleExample.cc). A fairly complete
+                      illustration of the FFTJet usage. Includes
+                      construction of the clustering tree, simple
+                      pattern recognition which selects a configuration
+                      with a predefined number of jets, and iterative
+                      jet energy recombination in the "fuzzy" mode which
+                      employs Monte Carlo-simulated jet shapes as cluster
+                      membership functions.
+
+clusteringTreeVis  -- (in file clusteringTreeVis.cc). This program
+                      illustrates how to write clustering trees to disk
+                      in a manner suitable for visualization by OpenDX.
+
+The example programs are compiled automatically when you type "make"
+in the main directory of the package. You can run these examples
+without any arguments. The "multiScaleExample" program must be run
+from this directory because it relies on some hardwired file names for
+interpolated membership functions, jet energy response tables, etc.
+
+There is a fair amount of supporting code in this directory and its
+subdirectories.
+
+Subdirectory "generator" contains Pythia MC generator used to generate
+jets in these examples and supporting Fortran to C++ interfaces.
+
+Subdirectory "kinematics" contains an implementation of the 4-vector class
+conforming to the FFTJet syntactical requirements (FFTJet can be used with
+a variety of 4-vector classes, including, for example, the implementation
+in the CLHEP library).
+
+Subdirectory "patreco" contains pieces of pattern recognition code
+which were originally intended to be a part of FFTJet but were not
+included at the end because of the additional dependence on LAPACK.
+The purpose of that code is to provide a framework within which the
+information about jet energies available at the pattern recognition
+stage can be transferred to the recombination stage (typically, in order
+to provide a good initial guess for the jet Pt). This code is not
+used in any of the examples, but the users of the package are welcome
+to take a look at it and use it in case it could be helpful in their
+pattern recognition studies.
+
+Subdirectory "tables" contains various curves obtained by Monte Carlo
+simulations for the "calorimeter" configuration employed by the
+"multiScaleExample" code (jet response curves and detector-level jet
+fragmentation function).
+
+Other supporting codes include functions and classes declared in the
+following header files:
+
+fftjet_typedefs.hh   -- Basic choices which configure FFTJet for working
+                        with the FFTW library and the 4-vector class
+                        in the "kinematics" directory.
+
+discretizeMCEvent.hh -- The "discretizeMCEvent" function propagates
+                        particles to the "calorimeter" in the magnetic
+                        field and discretizes the energy flow.
+
+FindNClusters.hh     -- This class selects a resolution scale from the
+                        clustering tree which has a predefined number
+                        of clusters and provides an initial jet Pt guess
+                        to the energy recombination stage.
+
+iterateRecombinationAlg.hh -- Iterates the energy recombination stage
+                              until convergence (or until the maximum
+                              number of iterations is reached).
+
+matchOneToOne.hh     -- Code for matching reconstructed jets to Pythia
+                        jets in the eta-phi space. (This code is actually
+                        much more general, but this is how it is used
+                        in the examples).
+
+processResults.hh    -- Pretty-prints reconstructed jets together with
+                        matched Pythia jets.
+
+VBuilders.hh         -- Contains classes for building 4-vectors out of
+                        discretization grid points.

@@ -1,0 +1,968 @@
+#include <cmath>
+#include <cfloat>
+#include <cassert>
+#include <algorithm>
+
+namespace fftjet {
+    template<class Cluster, typename T>
+    SparseClusteringTree<Cluster,T>::Node::Node(
+        const Cluster& jet, const unsigned level, const unsigned mask)
+        : jet_(jet),
+          originalLevel_(level),
+          nodeMask_(mask),
+          parent_(UINT_MAX)
+    {
+    }
+
+    template<class Cluster, typename T>
+    bool SparseClusteringTree<Cluster,T>::Node::operator==(const Node& r) const
+    {
+        return jet_ == r.jet_ &&
+               originalLevel_ == r.originalLevel_ &&
+               nodeMask_ == r.nodeMask_ &&
+               parent_ == r.parent_ &&
+               daus_ == r.daus_;
+    }
+
+    template<class Cluster, typename T>
+    SparseClusteringTree<Cluster,T>::SparseClusteringTree()
+        : badId(UINT_MAX),
+          maxLevel_(0),
+          sorted_(true)
+    {
+        nodes_.push_back(Node(Cluster::dummy(), 0, 0));
+    }
+
+    template<class Cluster, typename T>
+    unsigned SparseClusteringTree<Cluster,T>::addNode(
+        const Node& inputNode, const unsigned parentIndex)
+    {
+        const unsigned lastIndex = nodes_.size();
+        assert(parentIndex < lastIndex);
+        nodes_.push_back(inputNode);
+        nodes_[parentIndex].daus_.push_back(lastIndex);
+        nodes_[lastIndex].parent_ = parentIndex;
+        if (inputNode.originalLevel_ > maxLevel_)
+            maxLevel_ = inputNode.originalLevel_;
+        sorted_ = false;
+        return lastIndex;
+    }
+
+    template<class Cluster, typename T>
+    inline void SparseClusteringTree<Cluster,T>::addScale(
+        const double scale)
+    {
+        // Make sure scales are arranged in a decreasing order
+        const unsigned nScales = scales_.size();
+        if (nScales)
+            assert(scale < scales_[nScales-1]);
+        scales_.push_back(scale);
+    }
+
+    template<class Cluster, typename T>
+    void SparseClusteringTree<Cluster,T>::clear()
+    {
+        nodes_.clear();
+        nodes_.push_back(Node(Cluster::dummy(), 0, 0));
+        scales_.clear();
+        maxLevel_ = 0;
+        sorted_ = true;
+    }
+
+    template<class Cluster, typename T>
+    SparseClusteringTree<Cluster,T>::SparseClusteringTree(
+        const SparseClusteringTree& r)
+        : badId(UINT_MAX),
+          nodes_(r.nodes_),
+          scales_(r.scales_),
+          maxLevel_(r.maxLevel_),
+          sorted_(r.sorted_),
+          moveMap_(r.moveMap_)
+    {
+    }
+
+    template<class Cluster, typename T>
+    SparseClusteringTree<Cluster,T>&
+    SparseClusteringTree<Cluster,T>::operator=(const SparseClusteringTree& r)
+    {
+        if (this == &r)
+            return *this;
+        nodes_ = r.nodes_;
+        scales_ = r.scales_;
+        maxLevel_ = r.maxLevel_;
+        sorted_ = r.sorted_;
+        moveMap_ = r.moveMap_;
+        return *this;
+    }
+
+    template<class Cluster, typename T>
+    bool SparseClusteringTree<Cluster,T>::operator==(
+        const SparseClusteringTree& r) const
+    {
+        return sorted_ == r.sorted_ &&
+               maxLevel_ == r.maxLevel_ &&
+               nodes_ == r.nodes_ &&
+               scales_ == r.scales_;
+    }
+
+    template<class Cluster, typename T>
+    void SparseClusteringTree<Cluster,T>::scaledMagnitudeOnBranch(
+        const unsigned parentIndex, const unsigned dauNumber,
+        double currentValue)
+    {
+        const Node* nodes = &nodes_[0];
+        unsigned currentIdx = nodes[parentIndex].daus_[dauNumber];
+        const Node* currentNode = nodes + currentIdx;
+        unsigned ndaus = currentNode->daus_.size();
+        const Cluster& clus(currentNode->getCluster());
+        double s = clus.scale();
+        double v = s*s*clus.magnitude();
+        if (v >= currentValue)
+            v = currentValue/(1.0 + 8.0*DBL_EPSILON);
+        currentValue = v;
+        moveMap_[currentIdx] = std::make_pair(currentValue, currentIdx);
+
+        // Descend the branch until it splits or terminates
+        while (ndaus == 1U)
+        {
+            currentIdx = nodes[currentIdx].daus_[0];
+            currentNode = nodes + currentIdx;
+            ndaus = currentNode->daus_.size();
+
+            const Cluster& clu(currentNode->getCluster());
+            s = clu.scale();
+            v = s*s*clu.magnitude();
+            if (v >= currentValue)
+                v = currentValue/(1.0 + 8.0*DBL_EPSILON);
+            currentValue = v;
+            moveMap_[currentIdx] = std::make_pair(currentValue, currentIdx);
+        }
+
+        for (unsigned idau=0; idau<ndaus; ++idau)
+            scaledMagnitudeOnBranch(currentIdx, idau, currentValue);
+    }
+
+    template<class Cluster, typename T>
+    void SparseClusteringTree<Cluster,T>::sortNodes()
+    {
+        // This is an expensive operation. Do not rerun it twice in a row.
+        if (sorted_) return;
+        sorted_ = true;
+
+        const unsigned nNodes = nodes_.size();
+        moveMap_.resize(nNodes);
+        moveMap_[0] = std::make_pair(DBL_MAX, 0U);
+        if (nNodes <= 1U)
+            // There is only the top node. Nothing to do.
+            return;
+
+        // Prepare memory buffers
+        swapped_.clear();
+        swapped_.reserve(nNodes);
+        inverseMap_.resize(nNodes);
+
+        // Fill out the values of cluster magnitude times scale squared.
+        // Make sure that daughters have smaller values of this quantity
+        // than their parent (this must be true in principle but round-off
+        // errors can throw things out of order).
+        const unsigned ndaus = nodes_[0].daus_.size();
+        for (unsigned idau=0; idau<ndaus; ++idau)
+            scaledMagnitudeOnBranch(0, idau, DBL_MAX);
+
+        // Figure out the new order of nodes
+        std::sort(moveMap_.begin(), moveMap_.end(),
+                  std::greater<std::pair<double,unsigned> >());
+
+        // Check that the top node is mapped into itself
+        std::pair<double,unsigned>* pmap = &moveMap_[0];
+        assert(pmap[0].second == 0U);
+
+        // Now, prepare the new vector of nodes as well as
+        // the inverse mapping
+        const Node* from = &nodes_[0];
+        unsigned* invmap = &inverseMap_[0];
+        for (unsigned i=0; i<nNodes; ++i)
+        {
+            const unsigned iorig = pmap[i].second;
+            swapped_.push_back(from[iorig]);
+            invmap[iorig] = i;
+        }
+
+        // Reestablish the parent-daughter relationships
+        Node* nodes = &swapped_[0];
+        for (unsigned i=0; i<nNodes; ++i)
+        {
+            if (i)
+                nodes[i].parent_ = invmap[nodes[i].parent_];
+            const unsigned ndaus = nodes[i].daus_.size();
+            if (ndaus)
+            {
+                unsigned *daus = &nodes[i].daus_[0];
+                for (unsigned idau=0; idau<ndaus; ++idau)
+                    daus[idau] = invmap[daus[idau]];
+            }
+        }
+
+        // Swap the new vector of nodes with the original
+        nodes_.swap(swapped_);
+    }
+
+    template<class Cluster, typename T>
+    unsigned SparseClusteringTree<Cluster,T>::getLevel(
+        const double scale) const
+    {
+        assert(!scales_.empty());
+        const double* scales = &scales_[0];
+        unsigned maxlevel = scales_.size() - 1;
+        if (scale <= scales[maxlevel])
+            return maxlevel;
+        unsigned minlevel = 0;
+        while (maxlevel > minlevel + 1)
+        {
+            const unsigned trylevel = (maxlevel + minlevel)/2;
+            if (scale <= scales[trylevel])
+                minlevel = trylevel;
+            else
+                maxlevel = trylevel;
+        }
+        return scale == scales[maxlevel] ? maxlevel : minlevel;
+    }
+
+    template<class Cluster, typename T>
+    unsigned SparseClusteringTree<Cluster,T>::countLevelNodesOnBranch(
+        const unsigned level, const unsigned parentIndex,
+        const unsigned dauNumber) const
+    {
+        const Node* nodes = &nodes_[0];
+        const unsigned startLevel = nodes[parentIndex].originalLevel_ + 1U;
+        assert(level >= startLevel);
+
+        unsigned currentIndex = nodes[parentIndex].daus_[dauNumber];
+        const Node* currentNode = nodes + currentIndex;
+        unsigned ndaus = currentNode->daus_.size();
+
+        // Descend the branch until it splits or terminates
+        while (ndaus == 1U)
+        {
+            currentIndex = nodes[currentIndex].daus_[0];
+            currentNode = nodes + currentIndex;
+            ndaus = currentNode->daus_.size();
+        }
+
+        unsigned count = 0;
+        if (level <= currentNode->originalLevel_)
+            ++count;
+        else
+            for (unsigned idau=0; idau<ndaus; ++idau)
+                count += countLevelNodesOnBranch(level, currentIndex, idau);
+        return count;
+    }
+
+    template<class Cluster, typename T>
+    void SparseClusteringTree<Cluster,T>::getLevelNodesOnBranch(
+        const unsigned level, std::vector<unsigned>* resultNodes,
+        const unsigned parentIndex, const unsigned dauNumber,
+        const unsigned vetoBits) const
+    {
+        const Node* nodes = &nodes_[0];
+        const unsigned startLevel = nodes[parentIndex].originalLevel_ + 1U;
+        assert(level >= startLevel);
+
+        unsigned currentIndex = nodes[parentIndex].daus_[dauNumber];
+        const Node* currentNode = nodes + currentIndex;
+        unsigned ndaus = currentNode->daus_.size();
+
+        unsigned bestIndex = currentIndex;
+        unsigned bestMask = currentNode->nodeMask_;
+
+        // Descend the branch until it splits or terminates
+        while (ndaus == 1U)
+        {
+            currentIndex = nodes[currentIndex].daus_[0];
+            currentNode = nodes + currentIndex;
+            ndaus = currentNode->daus_.size();
+
+            // Check if we need to update the best node
+            if (!(bestMask & SLOWEST_DRIFT))
+            {
+                const unsigned mask = currentNode->nodeMask_;
+                if (mask & (SLOWEST_DRIFT | MIDRANGE_NODE))
+                {
+                    bestIndex = currentIndex;
+                    bestMask = mask;
+                }
+            }
+        }
+
+        if (level <= currentNode->originalLevel_)
+        {
+            if (!(bestMask & vetoBits))
+                resultNodes->push_back(bestIndex);
+        }
+        else
+            for (unsigned idau=0; idau<ndaus; ++idau)
+                getLevelNodesOnBranch(level, resultNodes,
+                                      currentIndex, idau, vetoBits);
+    }
+
+    template<class Cluster, typename T>
+    void SparseClusteringTree<Cluster,T>::getLevelNodes(
+        const unsigned level, std::vector<unsigned>* nodes) const
+    {
+        assert(level <= maxLevel_);
+        assert(nodes);
+        nodes->clear();
+        if (level)
+        {
+            const unsigned ndaus = nodes_[0].daus_.size();
+            for (unsigned idau=0; idau<ndaus; ++idau)
+                getLevelNodesOnBranch(level, nodes, 0, idau);
+        }
+        else
+            nodes->push_back(0U);
+    }
+
+    template<class Cluster, typename T>
+    template<class BooleanPredicate>
+    void SparseClusteringTree<Cluster,T>::getPassingNodes(
+        const unsigned level, const BooleanPredicate& pred,
+        std::vector<unsigned>* rnodes) const
+    {
+        assert(rnodes);
+        rnodes->clear();
+
+        getLevelNodes(level, &inverseMap_);
+        const unsigned n = inverseMap_.size();
+        if (n)
+        {
+            const unsigned* idx = &inverseMap_[0];
+            const Node* nodes = &nodes_[0];
+            for (unsigned i=0; i<n; ++i)
+                if (pred(nodes[idx[i]].jet_))
+                    rnodes->push_back(idx[i]);
+        }
+    }
+
+    template<class Cluster, typename T>
+    template<class BooleanPredicate>
+    void SparseClusteringTree<Cluster,T>::branchOccupancy(
+        const BooleanPredicate& pred,
+        std::vector<unsigned>* occupancy,
+        const unsigned parentIndex, const unsigned dauNumber) const
+    {
+        const Node* nodes = &nodes_[0];
+
+        unsigned currentIndex = nodes[parentIndex].daus_[dauNumber];
+        const Node* currentNode = nodes + currentIndex;
+        unsigned ndaus = currentNode->daus_.size();
+
+        unsigned bestIndex = currentIndex;
+        unsigned bestMask = currentNode->nodeMask_;
+
+        // Descend the branch until it splits or terminates
+        while (ndaus == 1U)
+        {
+            currentIndex = nodes[currentIndex].daus_[0];
+            currentNode = nodes + currentIndex;
+            ndaus = currentNode->daus_.size();
+
+            // Check if we need to update the best node
+            if (!(bestMask & SLOWEST_DRIFT))
+            {
+                const unsigned mask = currentNode->nodeMask_;
+                if (mask & (SLOWEST_DRIFT | MIDRANGE_NODE))
+                {
+                    bestIndex = currentIndex;
+                    bestMask = mask;
+                }
+            }
+        }
+
+        if (pred(nodes[bestIndex].jet_))
+        {
+            const unsigned startLevel = nodes[parentIndex].originalLevel_ + 1U;
+            const unsigned stopLevel = currentNode->originalLevel_;
+            assert(stopLevel <= maxLevel_);
+            unsigned* occ = &(*occupancy)[0];
+            for (unsigned i=startLevel; i<=stopLevel; ++i)
+                ++occ[i];
+        }
+
+        for (unsigned idau=0; idau<ndaus; ++idau)
+            branchOccupancy(pred, occupancy, currentIndex, idau);
+    }
+
+    template<class Cluster, typename T>
+    template<class BooleanPredicate>
+    void SparseClusteringTree<Cluster,T>::occupancyInScaleSpace(
+        const BooleanPredicate& pred, std::vector<unsigned>* occupancy) const
+    {
+        assert(occupancy);
+        occupancy->resize(maxLevel_ + 1);
+        unsigned* occ = &(*occupancy)[0];
+        *occ = 1U;
+        for (unsigned i=1; i<=maxLevel_; ++i)
+            occ[i] = 0;
+
+        const unsigned ndaus = nodes_[0].daus_.size();
+        for (unsigned idau=0; idau<ndaus; ++idau)
+            branchOccupancy(pred, occupancy, 0, idau);
+    }
+
+    template<class Cluster, typename T>
+    template<class BooleanPredicate>
+    bool SparseClusteringTree<Cluster,T>::clusterCountLevels(
+        const unsigned desiredCount, const BooleanPredicate& pred,
+        unsigned* minLevel, unsigned* maxLevel) const
+    {
+        assert(minLevel);
+        assert(maxLevel);
+
+        *minLevel = 0;
+        *maxLevel = 0;
+        bool status = false;
+
+        occupancyInScaleSpace(pred, &inverseMap_);
+        const unsigned occSize = inverseMap_.size();
+        if (occSize > 1)
+        {
+            const unsigned* occ = &inverseMap_[0];
+            for (unsigned i=1; i<occSize; ++i)
+                if (occ[i] == desiredCount)
+                {
+                    *minLevel = i;
+                    break;
+                }
+            if (*minLevel)
+            {
+                for (unsigned i=occSize-1; i; --i)
+                    if (occ[i] == desiredCount)
+                    {
+                        *maxLevel = i;
+                        break;
+                    }
+
+                status = true;
+                for (unsigned i=*minLevel+1; i<*maxLevel; ++i)
+                    if (occ[i] != desiredCount)
+                    {
+                        status = false;
+                        break;
+                    }
+            }
+        }
+
+        return status;
+    }
+
+    template<class Cluster, typename T>
+    template<class BooleanPredicate>
+    unsigned SparseClusteringTree<Cluster,T>::stableClusterCount(
+        const BooleanPredicate& pred,
+        unsigned* minLevel, unsigned* maxLevel,
+        const double alpha,
+        const unsigned minStartingLevel,
+        const unsigned maxStartingLevel) const
+    {
+        assert(minLevel);
+        assert(maxLevel);
+
+        *minLevel = 0;
+        *maxLevel = 0;
+        unsigned bestN = 0;
+        double bestStability = 0.0;
+
+        const unsigned lmin = minStartingLevel > 0 ? minStartingLevel : 1;
+        const unsigned nm1 = maxLevel_;
+        const unsigned lmax = maxStartingLevel < nm1 ? maxStartingLevel : nm1;
+
+        occupancyInScaleSpace(pred, &inverseMap_);
+        const unsigned occSize = inverseMap_.size();
+        if (occSize > 1)
+        {
+            const unsigned* occ = &inverseMap_[0];
+
+            unsigned oldN = occ[lmin];
+            double oldScale = getScale(lmin);
+            unsigned oldMinLevel = lmin;
+
+            for (unsigned level = lmin+1; level <= lmax; ++level)
+            {
+                const double newScale = getScale(level);
+                const unsigned N = occ[level];
+                if (N == oldN)
+                {
+                    const double stability = N ? pow(N,alpha)*fabs(
+                        log(oldScale/newScale)) : 0.0;
+                    if (stability > bestStability)
+                    {
+                        bestN = N;
+                        bestStability = stability;
+                        *minLevel = oldMinLevel;
+                        *maxLevel = level;
+                    }
+                }
+                else
+                {
+                    oldN = N;
+                    oldScale = newScale;
+                    oldMinLevel = level;
+                }
+            }
+        }
+
+        return bestN;
+    }
+
+    template<class Cluster, typename T>
+    void SparseClusteringTree<Cluster,T>::getAllScales(
+        std::vector<double>* scales,
+        const bool increasingOrder) const
+    {
+        assert(scales);
+        assert(!scales_.empty());
+        scales->resize(scales_.size() - 1U);
+        if (increasingOrder)
+            std::reverse_copy(scales_.begin()+1, scales_.end(),
+                              scales->begin());
+        else
+            std::copy(scales_.begin()+1, scales_.end(), scales->begin());
+    }
+
+    template<class Cluster, typename T>
+    template<class BooleanPredicate>
+    unsigned SparseClusteringTree<Cluster,T>::clusterCount(
+        const unsigned level, const BooleanPredicate& pred) const
+    {
+        getLevelNodes(level, &inverseMap_);
+        unsigned count = 0;
+        const unsigned n = inverseMap_.size();
+        if (n)
+        {
+            const unsigned* idx = &inverseMap_[0];
+            const Node* nodes = &nodes_[0];
+            for (unsigned i=0; i<n; ++i)
+                if (pred(nodes[idx[i]].jet_))
+                    ++count;
+        }
+        return count;
+    }
+
+    template<class Cluster, typename T>
+    inline unsigned SparseClusteringTree<Cluster,T>::nClusters(
+        const unsigned level) const
+    {
+        assert(level <= maxLevel_);
+        unsigned count = 0;
+        if (level)
+        {
+            const unsigned ndaus = nodes_[0].daus_.size();
+            for (unsigned idau=0; idau<ndaus; ++idau)
+                count += countLevelNodesOnBranch(level, 0, idau);
+        }
+        else
+            ++count;
+        return count;
+    }
+
+    template<class Cluster, typename T>
+    double SparseClusteringTree<Cluster,T>::minScale() const
+    {
+        if (!scales_.empty())
+            return scales_[scales_.size() - 1U];
+        else
+            return 0.0;
+    }
+
+    template<class Cluster, typename T>
+    double SparseClusteringTree<Cluster,T>::maxScale() const
+    {
+        if (!scales_.empty())
+            return scales_[1U];
+        else
+            return 0.0;
+    }
+
+    template<class Cluster, typename T>
+    bool SparseClusteringTree<Cluster,T>::isAncestor(
+        const NodeId id1, const NodeId id2) const
+    {
+        if (id2 < nodes_.size())
+        {
+            const Node* nodes = &nodes_[0];
+            const unsigned level1 = nodes[id1].originalLevel_;
+            for (NodeId parent = nodes[id2].parent_;
+                 parent != badId && nodes[parent].originalLevel_ >= level1;
+                 parent = nodes[parent].parent_)
+                if (parent == id1)
+                    return true;
+        }
+        return false;
+    }
+
+    template<class Cluster, typename T>
+    void SparseClusteringTree<Cluster,T>::lockDaus(
+        const unsigned parentIndex, const unsigned dauNumber,
+        const bool lock) const
+    {
+        const Node* nodes = &nodes_[0];
+        unsigned currentIdx = nodes[parentIndex].daus_[dauNumber];
+        const Node* currentNode = nodes + currentIdx;
+        unsigned ndaus = currentNode->daus_.size();
+        if (lock)
+            currentNode->nodeMask_ |= RESERVED_LOCK;
+        else
+            currentNode->nodeMask_ &= ~RESERVED_LOCK;
+
+        // Descend the branch until it splits or terminates
+        while (ndaus == 1U)
+        {
+            currentIdx = nodes[currentIdx].daus_[0];
+            currentNode = nodes + currentIdx;
+            ndaus = currentNode->daus_.size();
+            if (lock)
+                currentNode->nodeMask_ |= RESERVED_LOCK;
+            else
+                currentNode->nodeMask_ &= ~RESERVED_LOCK;
+        }
+
+        for (unsigned idau=0; idau<ndaus; ++idau)
+            lockDaus(currentIdx, idau, lock);
+    }
+
+    template<class Cluster, typename T>
+    bool SparseClusteringTree<Cluster,T>::slowDausAboveId(
+        const unsigned parentIndex, const unsigned dauNumber,
+        const NodeId id) const
+    {
+        const Node* nodes = &nodes_[0];
+        unsigned currentIdx = nodes[parentIndex].daus_[dauNumber];
+        if (currentIdx >= id)
+            return false;
+
+        int ancestor = -10;  // -10 means unknown, 0 no, 1 yes
+        const Node* currentNode = nodes + currentIdx;
+        if (currentNode->nodeMask_ & RESERVED_PASS)
+        {
+            ancestor = isAncestor(currentIdx, id);
+            if (!ancestor)
+                return true;
+        }
+        unsigned ndaus = currentNode->daus_.size();
+
+        while (ndaus == 1U)
+        {
+            currentIdx = nodes[currentIdx].daus_[0];
+            if (currentIdx >= id)
+                return false;
+            currentNode = nodes + currentIdx;
+            if (currentNode->nodeMask_ & RESERVED_PASS)
+            {
+                if (ancestor == -10)
+                    ancestor = isAncestor(currentIdx, id);
+                if (!ancestor)
+                    return true;
+            }
+            ndaus = currentNode->daus_.size();
+        }
+
+        for (unsigned idau=0; idau<ndaus; ++idau)
+            if (slowDausAboveId(currentIdx, idau, id))
+                return true;
+
+        return false;
+    }
+
+    template<class Cluster, typename T>
+    unsigned SparseClusteringTree<Cluster,T>::relockDausAboveId(
+        const unsigned parentIndex, const unsigned dauNumber,
+        const NodeId id) const
+    {
+        unsigned count = 0;
+
+        const Node* nodes = &nodes_[0];
+        unsigned currentIdx = nodes[parentIndex].daus_[dauNumber];
+        if (currentIdx >= id)
+            return count;
+        const Node* currentNode = nodes + currentIdx;
+        unsigned ndaus = currentNode->daus_.size();
+        if (currentNode->nodeMask_ & RESERVED_PASS)
+        {
+            currentNode->nodeMask_ |= RESERVED_CNT;
+            ++count;
+            for (unsigned idau=0; idau<ndaus; ++idau)
+                lockDaus(currentIdx, idau, true);
+            return count;
+        }
+        
+        while (ndaus == 1U)
+        {
+            currentIdx = nodes[currentIdx].daus_[0];
+            if (currentIdx >= id)
+                return count;
+            currentNode = nodes + currentIdx;
+            ndaus = currentNode->daus_.size();
+            if (currentNode->nodeMask_ & RESERVED_PASS)
+            {
+                currentNode->nodeMask_ |= RESERVED_CNT;
+                ++count;
+                for (unsigned idau=0; idau<ndaus; ++idau)
+                    lockDaus(currentIdx, idau, true);
+                return count;
+            }
+        }
+
+        for (unsigned idau=0; idau<ndaus; ++idau)
+            count += relockDausAboveId(currentIdx, idau, id);
+
+        return count;
+    }
+
+    template<class Cluster, typename T>
+    template<class BooleanPredicate>
+    void SparseClusteringTree<Cluster,T>::magS2Init(
+        const BooleanPredicate& pred,
+        std::vector<double>* threshold, const unsigned maxClusterN) const
+    {
+        assert(sorted_ && "The tree must be sorted");
+
+        // (Re)set reserved mask bits
+        const unsigned nNodes = nodes_.size();
+        const Node* nodes = &nodes_[0];
+        for (unsigned i=0; i<nNodes; ++i)
+        {
+            nodes[i].nodeMask_ &= ~(RESERVED_LOCK | RESERVED_CNT |
+                                    RESERVED_TAG | RESERVED_PASS);
+            if (nodes[i].nodeMask_ & (SLOWEST_DRIFT | MIDRANGE_NODE))
+                if (pred(nodes[i].jet_))
+                    nodes[i].nodeMask_ |= RESERVED_PASS;
+        }
+
+        // Clear the result and check if we can get some idea
+        // about its expected size
+        if (threshold)
+        {
+            threshold->clear();
+
+            if (nNodes <= 1U)
+            {
+                // There is only the top node. Fill the result right here.
+                threshold->reserve(1);
+                threshold->push_back(DBL_MAX);
+            }
+            else
+            {
+                const unsigned maxResultSize = maxClusterN + 1U;
+                if (maxResultSize != UINT_MAX)
+                    threshold->reserve(std::min(nNodes, maxResultSize));
+            }
+        }
+    }
+
+    template<class Cluster, typename T>
+    unsigned SparseClusteringTree<Cluster,T>::magS2Cycle(
+        std::vector<double>* threshold,
+        unsigned* nodeNumber, const unsigned maxFills) const
+    {
+        assert(nodeNumber);
+        const unsigned nNodes = nodes_.size();
+        const Node* nodes = &nodes_[0];
+        const std::pair<double,unsigned>* thr = &moveMap_[0];
+
+        unsigned nAddedTotal = 0;
+        bool firstResult = *nodeNumber <= 1U;
+        for (; *nodeNumber < nNodes && nAddedTotal < maxFills; ++*nodeNumber)
+        {
+            const unsigned islow = *nodeNumber;
+            if (!(nodes[islow].nodeMask_ & RESERVED_PASS))
+                continue;
+
+            // Is this node locked?
+            unsigned nToCount = 0;
+            while (nodes[islow].nodeMask_ & RESERVED_LOCK)
+            {
+                // Try to see if unlocking this node will release
+                // any additional "slowest drift" nodes with MagS2
+                // value below the current one (which means with
+                // index below the current one)
+                unsigned ndaus = 0;
+                bool haveAbove = false;
+                unsigned parent = nodes[islow].parent_;
+                for (; parent; parent = nodes[parent].parent_)
+                    if (nodes[parent].nodeMask_ & RESERVED_CNT)
+                    {
+                        ndaus = nodes[parent].daus_.size();
+                        for (unsigned idau=0; idau<ndaus && !haveAbove; ++idau)
+                            haveAbove = slowDausAboveId(parent, idau, islow);
+                        break;
+                    }
+
+                // Node with RESERVED_CNT bit set must exist
+                assert(ndaus);
+
+                if (haveAbove)
+                {
+                    // We need to perform the following:
+                    // 1) unlock all the daus of the parent
+                    // 2) count the daus with id higher than id
+                    //    of this node and lock their daus
+                    unsigned nAdded = 0;
+                    for (unsigned idau=0; idau<ndaus; ++idau)
+                    {
+                        lockDaus(parent, idau, false);
+                        nAdded += relockDausAboveId(parent, idau, islow);
+                    }
+                    assert(nAdded);
+                    nodes[parent].nodeMask_ &= ~RESERVED_CNT;
+                    --nAdded;
+                    nToCount += nAdded;
+                }
+                else
+                    break;
+            }
+
+            // If this node is now unlocked, mark it as counted
+            // and mark all daughter nodes as locked
+            if (!(nodes[islow].nodeMask_ & RESERVED_LOCK))
+            {
+                nodes[islow].nodeMask_ |= RESERVED_CNT;
+                ++nToCount;
+                const unsigned ndaus = nodes[islow].daus_.size();
+                for (unsigned idau=0; idau<ndaus; ++idau)
+                    lockDaus(islow, idau, true);
+            }
+
+            // Produce the output
+            if (threshold)
+            {
+                if (firstResult)
+                {
+                    // Give the dummy threshold 10% increase over the real one
+                    threshold->push_back(thr[islow].first*1.1);
+                    firstResult = false;
+                }
+                for (unsigned icnt=0; icnt<nToCount; ++icnt)
+                    threshold->push_back(thr[islow].first);
+            }
+            nAddedTotal += nToCount;
+        }
+
+        return nAddedTotal;
+    }
+
+    template<class Cluster, typename T>
+    template<class BooleanPredicate>
+    void SparseClusteringTree<Cluster,T>::nClustersAboveMagS2Threshold(
+        const BooleanPredicate& pred,
+        std::vector<double>* threshold, const unsigned maxClusterN) const
+    {
+        assert(threshold);
+        magS2Init(pred, threshold, maxClusterN);
+        if (nodes_.size() <= 1U)
+            return;
+
+        unsigned currentNode = 1;
+        magS2Cycle(threshold, &currentNode, maxClusterN);
+
+        if (threshold->size() > maxClusterN + 1U)
+            threshold->resize(maxClusterN + 1U);
+
+        // Just to check things up, figure out the number
+        // of leaf branches and make sure the number of results
+        // is consistent with it
+        // if (maxClusterN + 1U == UINT_MAX)
+        // {
+        //     const unsigned nNodes = nodes_.size();
+        //     const Node* nodes = &nodes_[0];
+        //     unsigned nleaf = 0;
+        //     for (unsigned islow=0; islow<nNodes; ++islow)
+        //     {
+        //         if (!(nodes[islow].nodeMask_ & RESERVED_PASS))
+        //             continue;
+        //
+        //         const unsigned ndaus = nodes[islow].daus_.size();
+        //         bool hasDaus = false;
+        //         for (unsigned i=0; i<ndaus && !hasDaus; ++i)
+        //             hasDaus = slowDausAboveId(islow, i, nNodes);
+        //         if (!hasDaus)
+        //             ++nleaf;
+        //     }
+        //     assert(threshold->size() == nleaf + 1U);
+        // }
+    }
+
+    template<class Cluster, typename T>
+    template<class BooleanPredicate>
+    void SparseClusteringTree<Cluster,T>::getMagS2OptimalNodes(
+        const BooleanPredicate& pred,
+        const unsigned nOpt, const unsigned level,
+        std::vector<NodeId>* nodes, std::vector<double>* threshold) const
+    {
+        assert(nOpt);
+        assert(level <= maxLevel_);
+        assert(nodes);
+        nodes->clear();
+        nodes->reserve(nOpt);
+
+        magS2Init(pred, threshold, nOpt + 1U);
+        const unsigned nNodes = nodes_.size();
+        if (nNodes <= 1U)
+            return;
+
+        unsigned currentNode = 1;
+        const unsigned nfilled = magS2Cycle(threshold, &currentNode, nOpt);
+
+        // Cycle over nodes and collect the ones tagged RESERVED_CNT.
+        // There must be exactly "nfilled" of them.
+        const Node* mynodes = &nodes_[0];
+        {
+            unsigned npushed = 0;
+            for (unsigned i=1; i<nNodes; ++i)
+                if (mynodes[i].nodeMask_ & RESERVED_CNT)
+                {
+                    nodes->push_back(i);
+                    ++npushed;
+                }
+            assert(npushed == nfilled);
+        }
+
+        // Collect other nodes on the level, if possible
+        if (level && currentNode < nNodes)
+        {
+            // Tag all parents of the nodes selected so far
+            const unsigned nodesSoFar = nodes->size();
+            const unsigned* outNodes = nodesSoFar ? &(*nodes)[0] : 0;
+            for (unsigned i=0; i<nodesSoFar; ++i)
+                for (unsigned parent = mynodes[outNodes[i]].parent_; parent;
+                     parent = mynodes[parent].parent_)
+                    mynodes[parent].nodeMask_ |= RESERVED_TAG;
+
+            // Collect all nodes on the given level which are not
+            // tagged by any of the reserved bits
+            inverseMap_.clear();
+            const unsigned ndaus = mynodes[0].daus_.size();
+            for (unsigned idau=0; idau<ndaus; ++idau)
+                getLevelNodesOnBranch(
+                    level, &inverseMap_, 0, idau,
+                    RESERVED_LOCK | RESERVED_CNT | RESERVED_TAG);
+
+            // Output those nodes which pass the predicate condition
+            const unsigned nAdd = inverseMap_.size();
+            for (unsigned i=0; i<nAdd; ++i)
+            {
+                const unsigned idx = inverseMap_[i];
+                if (mynodes[idx].nodeMask_ & RESERVED_PASS)
+                    nodes->push_back(idx);
+            }
+        }
+
+        // Add one more threshold value
+        if (threshold)
+        {
+            if (nfilled <= nOpt && currentNode < nNodes)
+                magS2Cycle(threshold, &currentNode, 1U);
+            if (threshold->size() > nOpt + 2U)
+                threshold->resize(nOpt + 2U);
+        }
+    }
+}

@@ -1,0 +1,176 @@
+#include <cmath>
+#include <cassert>
+#include <cfloat>
+#include <algorithm>
+
+#include "fftjet/convertPeakCoords.hh"
+#include "fftjet/AbsPeakSelector.hh"
+
+namespace fftjet {
+    template<typename Real>
+    ClusteringSequencer<Real>::ClusteringSequencer(
+        AbsConvolverBase<Real>* iconvolver,
+        Functor1<bool,Peak>* selector,
+        const PeakFinder& ipeakFinder,
+        const std::vector<double>& iinitialScales,
+        const unsigned imaxAdaptiveScales, const double iminRatioLog)
+        : convolver(iconvolver),
+          peakSelector(selector),
+          peakFinder(ipeakFinder),
+          initialScales(iinitialScales),
+          maxAdaptiveScales_(imaxAdaptiveScales),
+          minRatioLog_(iminRatioLog),
+          nEta(iconvolver->nEtaFFT()),
+          nPhi(iconvolver->nPhiFFT()),
+          convolvedData(new Real[nEta*nPhi])
+    {
+        // Check argument validity
+        assert(convolver);
+        assert(peakSelector);
+
+        // Arrange the scales in the decreasing order -- it is faster
+        // to build the clustering tree that way
+        std::sort(initialScales.begin(), initialScales.end(),
+                  std::greater<double>());
+    }
+
+    template<typename Real>
+    ClusteringSequencer<Real>::~ClusteringSequencer()
+    {
+        delete [] convolvedData;
+    }
+
+    template<typename Real>
+    void ClusteringSequencer<Real>::runPeakSelector(
+        const double scale)
+    {
+        const unsigned nPeaks(peaks.size());
+        selected.clear();
+        selected.reserve(nPeaks);
+        for (unsigned i=0; i<nPeaks; ++i)
+        {
+            peaks[i].setScale(scale);
+            if ((*peakSelector)(peaks[i]))
+                selected.push_back(peaks[i]);
+        }
+    }
+
+    template<typename Real>
+    int ClusteringSequencer<Real>::processScale(
+        const double scale, const Grid2d<Real>& eventData,
+        AbsClusteringTree<Peak,long>* outputTree)
+    {
+        // Convolve the data with the kernel
+        convolver->convolveWithKernel(scale, convolvedData, nEta, nPhi);
+
+        // Find the cluster positions.
+        // Ignore the peak finder status for now.
+        peakFinder.find(convolvedData, nEta, nPhi, &peaks);
+
+        // Convert the peak positions from cell width units
+        // into normal eta/phi units
+        convertPeakCoords(eventData, &peaks);
+
+        // Run the peak selector. This will fill the "selected"
+        // vector of Peak objects and will also set the correct
+        // resolution scale for each peak.
+        runPeakSelector(scale);
+
+        // Grow the clustering tree
+        outputTree->insert(scale, selected, 0L);
+
+        return 0;
+    }
+
+    template<typename Real>
+    int ClusteringSequencer<Real>::run(
+        const Grid2d<Real>& eventData,
+        AbsClusteringTree<Peak,long>* outputTree)
+    {
+        // Set up the convolver with the data. This will also verify
+        // compatibility of the data dimensionality with the FFT engine.
+        convolver->setEventData(eventData.data(),
+                                eventData.nEta(), eventData.nPhi());
+
+        // Set up the peak selector with the event data
+        AbsPeakSelector<Real>* sel = dynamic_cast<AbsPeakSelector<Real>*>(
+            peakSelector);
+        if (sel) sel->setEventData(eventData);
+
+        // Reset the clustering tree
+        outputTree->clear();
+
+        // Cycle over the initial scales
+        const unsigned ninit = initialScales.size();
+        for (unsigned i=0; i<ninit; ++i)
+        {
+            const int status = processScale(initialScales[i], eventData,
+                                            outputTree);
+            // Terminate the processing on any error
+            if (status)
+                return status;
+        }
+
+        // Ask the tree if it wants more levels and build those levels
+        for (unsigned i=0; i<maxAdaptiveScales_; ++i)
+        {
+            const double scale = outputTree->nextBestScale(minRatioLog_);
+            assert(scale >= 0.0);
+            if (scale == 0.0)
+                break;
+            const int status = processScale(scale, eventData, outputTree);
+            // Terminate the processing on any error
+            if (status)
+                return status;
+        }
+
+        // Run the standard tree post-processing sequence
+        outputTree->postProcess();
+
+        return 0;
+    }
+
+    template<typename Real>
+    int ClusteringSequencer<Real>::insertCompleteEvent(
+        const double scale, const Grid2d<Real>& eventData,
+        AbsClusteringTree<Peak,long>* outputTree,
+        const double dataCutoff, const bool updateRadii)
+    {
+        assert(outputTree);
+        assert(scale > 0.0);
+        assert(scale < outputTree->minScale());
+
+        const double dummy[3] = {0.0, 0.0, 0.0};
+        const Real cutoff = static_cast<Real>(dataCutoff);
+        peaks.clear();
+
+        const unsigned nEta = eventData.nEta();
+        const unsigned nPhi = eventData.nPhi();
+        const unsigned minEtaBin = peakFinder.smallestEtaBin() ?
+                                   peakFinder.smallestEtaBin() : 1;
+        const unsigned maxEtaBin = peakFinder.largestEtaBin() > nEta-1 ?
+                                   nEta-1 : peakFinder.largestEtaBin();
+        for (unsigned ieta=minEtaBin; ieta<maxEtaBin; ++ieta)
+        {
+            const double eta = eventData.etaBinCenter(ieta);
+            const Real* data = eventData.data() + ieta*nPhi;
+            for (unsigned iphi=0; iphi<nPhi; ++iphi)
+                if (data[iphi] > cutoff)
+                {
+                    Peak p(eta,eventData.phiBinCenter(iphi),data[iphi],dummy);
+                    p.setScale(scale);
+                    peaks.push_back(p);
+                }
+        }
+
+        outputTree->insert(scale, peaks, 0L);
+
+        if (updateRadii)
+        {
+            outputTree->updateClusterRadiusInfo();
+            outputTree->updateClusterSeparationInfo();
+        }
+
+        return 0;
+    }
+}

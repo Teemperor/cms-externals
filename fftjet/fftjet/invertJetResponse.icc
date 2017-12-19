@@ -1,0 +1,68 @@
+#include <cfloat>
+#include <cassert>
+
+namespace fftjet {
+    template <class Functor>
+    double invertJetResponse(const Functor& f, const double y)
+    {
+        assert(y >= 0.0);
+        if (y == 0.0)
+            return 0.0;
+
+        // Find such x that x*f(x) >= y
+        double xmin = 0.0;        
+        double xmax = y;
+        while (xmax*f(xmax) < y)
+        {
+            xmin = xmax;
+            xmax *= 2.0;
+        }
+
+        // Do bisections. This is slow but reliable, and works
+        // for all kinds of interpolation tables which do not have
+        // continuous derivatives.
+        const double eps = 4.0*DBL_EPSILON;
+        while ((xmax - xmin)/(xmax + xmin) > eps)
+        {
+            double xhalf = (xmax + xmin)/2.0;
+            if (xhalf*f(xhalf) >= y)
+                xmax = xhalf;
+            else
+                xmin = xhalf;
+        }
+        return (xmax + xmin)/2.0;
+    }
+
+    template <class Functor2d>
+    double invertJetResponse2d(const Functor2d& f,
+                               const double a,
+                               const double y)
+    {
+        assert(y >= 0.0);
+        if (y == 0.0)
+            return 0.0;
+
+        // Find such x that x*f(a, x) >= y
+        double xmin = 0.0;        
+        double xmax = y;
+        while (xmax*f(a, xmax) < y)
+        {
+            xmin = xmax;
+            xmax *= 2.0;
+        }
+
+        // Do bisections. This is slow but reliable, and works
+        // for all kinds of interpolation tables which do not have
+        // continuous derivatives.
+        const double eps = 4.0*DBL_EPSILON;
+        while ((xmax - xmin)/(xmax + xmin) > eps)
+        {
+            double xhalf = (xmax + xmin)/2.0;
+            if (xhalf*f(a, xhalf) >= y)
+                xmax = xhalf;
+            else
+                xmin = xhalf;
+        }
+        return (xmax + xmin)/2.0;
+    }
+}

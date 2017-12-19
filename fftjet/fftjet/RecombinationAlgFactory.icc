@@ -1,0 +1,47 @@
+#include "fftjet/KernelRecombinationAlg.hh"
+#include "fftjet/EtSumRecombinationAlg.hh"
+#include "fftjet/EtCentroidRecombinationAlg.hh"
+#include "fftjet/FasterKernelRecombinationAlg.hh"
+#include "fftjet/FasterEtSumRecombinationAlg.hh"
+#include "fftjet/FasterEtCentroidRecombinationAlg.hh"
+
+namespace fftjet {
+    template
+    <
+        typename Real,
+        typename VectorLike,
+        typename BgData,
+        typename VBuilder
+    >
+    DefaultRecombinationAlgFactory<Real,VectorLike,BgData,VBuilder>::
+    DefaultRecombinationAlgFactory()
+    {
+        (*this)["Kernel"] = new RecombinationAlgFactory<
+            KernelRecombinationAlg,Real,VectorLike,BgData,VBuilder>;
+        (*this)["EtCentroid"] = new RecombinationAlgFactory<
+            EtCentroidRecombinationAlg,Real,VectorLike,BgData,VBuilder>;
+        (*this)["EtSum"] = new RecombinationAlgFactory<
+            EtSumRecombinationAlg,Real,VectorLike,BgData,VBuilder>;
+        (*this)["FasterKernel"] = new RecombinationAlgFactory<
+            FasterKernelRecombinationAlg,Real,VectorLike,BgData,VBuilder>;
+        (*this)["FasterEtCentroid"] = new RecombinationAlgFactory<
+            FasterEtCentroidRecombinationAlg,Real,VectorLike,BgData,VBuilder>;
+        (*this)["FasterEtSum"] = new RecombinationAlgFactory<
+            FasterEtSumRecombinationAlg,Real,VectorLike,BgData,VBuilder>;
+    }
+
+    template
+    <
+        typename Real,
+        typename VectorLike,
+        typename BgData,
+        typename VBuilder
+    >
+    DefaultRecombinationAlgFactory<Real,VectorLike,BgData,VBuilder>::
+    ~DefaultRecombinationAlgFactory()
+    {
+        for (typename std::map<std::string, BaseFactory *>::iterator it =
+                 this->begin(); it != this->end(); ++it)
+            delete it->second;
+    }
+}

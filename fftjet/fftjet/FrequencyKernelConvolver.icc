@@ -1,0 +1,47 @@
+#include <cassert>
+
+#include "fftjet/scanFrequencyKernel.hh"
+
+namespace fftjet {
+    template<typename Real, typename Complex>
+    FrequencyKernelConvolver<Real, Complex>::FrequencyKernelConvolver(
+        const AbsFFTEngine<Real,Complex>* fftEngine,
+        const AbsFrequencyKernel* ikernel,
+        const unsigned minFixBin, const unsigned maxFixBin)
+        : AbsKernelConvolver<Real, Complex>(
+              fftEngine, minFixBin, maxFixBin),
+          kernel(ikernel)
+    {
+        assert(kernel);
+    }
+
+    template<typename Real, typename Complex>
+    KernelData<Real,Complex>
+    FrequencyKernelConvolver<Real, Complex>::buildKernelImage(
+        const double scale)
+    {
+        const AbsFFTEngine<Real,Complex>* const engine = this->fftEngine;
+        Complex* imageBuf = engine->allocateComplex();        
+        scanFrequencyKernel(engine, kernel, scale, imageBuf);
+
+        const unsigned nEta = engine->nEta();
+        const unsigned nPhi = engine->nPhi();
+        const unsigned nbins = nEta*nPhi;
+
+        Real* tempBuffer = new Real[nbins];
+        engine->transformBack(imageBuf, tempBuffer);
+
+        // Normalize the spatial image as density
+        const Real norma = normalizeFrequencyAsDensity(
+            engine, imageBuf, tempBuffer);
+        for (unsigned i=0; i<nbins; ++i)
+            tempBuffer[i] /= norma;
+        const double area = static_cast<double>(norma);
+
+        // Build the efficiency correction
+        Real* norm = 0;
+        if (AbsKernelConvolver<Real, Complex>::fixEfficiency)
+            norm = AbsKernelConvolver<Real, Complex>::buildEffNorm(tempBuffer);
+        return KernelData<Real,Complex>(tempBuffer, imageBuf, norm, area);
+    }
+}

@@ -1,0 +1,58 @@
+#include <cmath>
+
+namespace fftjet {
+    template <typename VectorLike>
+    inline double RecombinedJet<VectorLike>::magnitude() const
+    {
+        const double x(vec_.px());
+        const double y(vec_.py());
+        return sqrt(x*x + y*y);
+    }
+
+    template <typename VectorLike>
+    inline bool RecombinedJet<VectorLike>::operator==(
+        const RecombinedJet<VectorLike>& r) const
+    {
+        return peak_ == r.peak_ &&
+               vec_ == r.vec_ &&
+               ncells_ == r.ncells_ &&
+               etSum_ == r.etSum_ &&
+               centroidEta_ == r.centroidEta_ &&
+               centroidPhi_ == r.centroidPhi_ &&
+               etaWidth_ == r.etaWidth_ &&
+               phiWidth_ == r.phiWidth_ &&
+               etaPhiCorr_ == r.etaPhiCorr_ &&
+               fuzziness_ == r.fuzziness_ && 
+               pileup_ == r.pileup_ && 
+               uncertainty_ == r.uncertainty_ && 
+               convergenceDistance_ == r.convergenceDistance_;
+    }
+
+    template <typename VectorLike>
+    inline bool RecombinedJet<VectorLike>::operator!=(
+        const RecombinedJet<VectorLike>& r) const
+    {
+        return !(*this == r);
+    }
+
+    template <typename VectorLike>
+    inline bool RecombinedJet<VectorLike>::operator<(
+        const RecombinedJet<VectorLike>& r) const
+    {
+        return magnitude() < r.magnitude();
+    }
+
+    template <typename VectorLike>
+    inline bool RecombinedJet<VectorLike>::operator>(
+        const RecombinedJet<VectorLike>& r) const
+    {
+        return magnitude() > r.magnitude();
+    }
+
+    template <typename VectorLike>
+    inline RecombinedJet<VectorLike> RecombinedJet<VectorLike>::dummy()
+    {
+        return RecombinedJet(Peak::dummy(), VectorLike(),
+                             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    }
+}

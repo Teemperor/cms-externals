@@ -1,0 +1,5 @@
+This is collection of tests, taken from subdiretories of TauSpinner examples,
+which were supporitng different publications.
+Here there collected in one place and partially rewritten to remove dependence
+on the MCTester (except ex0 eample).
+Below find more detailed information: 

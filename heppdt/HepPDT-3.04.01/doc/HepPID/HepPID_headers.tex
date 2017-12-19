@@ -1,0 +1,156 @@
+\section {HepPID headers}
+\label{PIDheaders}
+
+\subsection {ParticleIDTranslations.hh}
+
+\begin{tabbing}
+
+{\bf namespace HepPID} \\  \\
+
+{\bf Free functions:} \\
+\hspace{0.5in} {\bf int translateHerwigtoPDT( const int herwigID);} \\
+\hspace{0.5in} {\bf int translatePDTtoHerwig( const int pid );} \\ 
+\hspace{0.5in} {\bf void  writeHerwigTranslation( std::ostream \& os );} \\  \\
+
+\hspace{0.5in} {\bf int translateIsajettoPDT( const int isajetID );} \\
+\hspace{0.5in} {\bf int translatePDTtoIsajet( const int pid );} \\ 
+\hspace{0.5in} {\bf void  writeIsajetTranslation( std::ostream \& os );} \\  \\
+
+\hspace{0.5in} {\bf int translatePythiatoPDT( const int pythiaID );} \\
+\hspace{0.5in} {\bf int translatePDTtoPythia( const int pid );} \\ 
+\hspace{0.5in} {\bf void  writePythiaTranslation( std::ostream \& os );} \\  \\
+
+\hspace{0.5in} {\bf int translateEvtGentoPDT( const int evtGenID );} \\
+\hspace{0.5in} {\bf int translatePDTtoEvtGen( const int pid );} \\
+\hspace{0.5in} {\bf void  writeEvtGenTranslation( std::ostream \& os );} \\  \\
+
+\hspace{0.5in} {\bf int translatePDGtabletoPDT( const int pdgID);} \\
+\hspace{0.5in} {\bf int translatePDTtoPDGtable( const int pid );} \\
+\hspace{0.5in} {\bf void  writePDGTranslation( std::ostream \& os )} \\  \\
+
+\hspace{0.5in} {\bf int translateQQtoPDT( const int qqID);} \\
+\hspace{0.5in} {\bf int translatePDTtoQQ( const int pid );} \\
+\hspace{0.5in} {\bf int translateQQbar( const int qqID);} \\
+\hspace{0.5in} {\bf int translateInverseQQbar( const int pid );} \\
+\hspace{0.5in} {\bf void  writeQQTranslation( std::ostream \& os );} \\  \\
+
+\hspace{0.5in} {\bf int translateGeanttoPDT( const int geantID);} \\
+\hspace{0.5in} {\bf int translatePDTtoGeant( const int pid );} \\  \\
+
+\end{tabbing}
+
+The writeXXXTranslation functions write a list of all known particle ID 
+translations for the specified Monte Carlo generator.
+
+QQ needs extra tranlation methods for the quark pair pseudo-particles since the 
+ID numbers overlap.
+
+\vfill\eject
+
+\subsection {ParticleName.hh}
+
+\begin{tabbing}
+
+{\bf namespace HepPID} \\  \\
+
+{\bf Free functions:} \\
+
+\hspace{0.5in} {\bf std::string  particleName( const int );} \\
+\hspace{1.0in}  Returns the HepPID standard name. \\
+
+\hspace{0.5in} {\bf int  particleName( const std::string \& );} \\
+\hspace{1.0in}  Returns the HepPID standard ID. \\
+
+\hspace{0.5in} {\bf void  listParticleNames( std::ostream \& os );} \\
+\hspace{1.0in} List all defined names.  \\
+
+\hspace{0.5in} {\bf bool validParticleName( const int );} \\
+\hspace{1.0in} Verify that this particle ID has a valid name.  \\
+
+\hspace{0.5in} {\bf bool validParticleName( const std::string \& );} \\
+\hspace{1.0in} Verify that this particle string has a valid ID.  \\
+
+\hspace{0.5in} {\bf class ParticleNameMap;} \\
+\hspace{0.5in} {\bf ParticleNameMap const \&  getParticleNameMap();} \\
+\hspace{1.0in} Access ParticleNameMap for other purposes.  \\
+\end{tabbing}
+
+Only getParticleNameMap is allowed to access ParticleNameMap.
+ParticleNameMap is initalized by the first call to getParticleNameMap.
+Because the class is static, this initialization only happens once.
+We use a data table so that compile time is not impacted.
+
+\subsection {ParticleIDMethods.hh}
+
+\begin{tabbing}
+
+{\bf namespace HepPID} \\  \\
+
+{\bf Free functions:} \\
+
+\hspace{0.5in} {\bf unsigned short digit( location loc, const int \& );} \\
+\hspace{1.0in} Return the digit at a named location in pid.  \\
+
+\hspace{0.5in} {\bf int A(const int \& );} \\
+\hspace{1.0in} If this is an ion, return A.  \\
+
+\hspace{0.5in} {\bf int Z(const int \& );} \\
+\hspace{1.0in} If this is an ion, return Z.  \\
+
+\hspace{0.5in} {\bf int lambda( const int \& );} \\
+\hspace{1.0in} If this is an ion, return nLambda.  \\
+
+\hspace{0.5in} {\bf int           abspid( const int \& );} \\
+\hspace{1.0in} Return the absolute value of the particle ID.  \\
+
+\hspace{0.5in} {\bf int    fundamentalID( const int \& );} \\
+\hspace{1.0in} Extract fundamental ID (1-100) if this is a "fundamental" particle.  \\
+
+\hspace{0.5in} {\bf bool hasFundamentalAnti( const int \& );} \\
+\hspace{1.0in} If this is a fundamental particle, does it have a valid antiparticle?  \\
+
+\hspace{0.5in} {\bf int extraBits( const int \& );} \\
+\hspace{1.0in} Returns everything beyond the 7th digit.  Mostly for internal use.  \\
+
+\hspace{0.5in} {\bf bool isValid( const int \& );} \\
+\hspace{1.0in}  Is this particle ID valid? \\
+
+\hspace{0.5in} {\bf bool isMeson( const int \& );} \\
+\hspace{0.5in} {\bf bool isBaryon( const int \& );} \\
+\hspace{0.5in} {\bf bool isDiQuark( const int \& );} \\
+\hspace{0.5in} {\bf bool isLepton( const int \& );} \\
+\hspace{0.5in} {\bf bool isHadron( const int \& );} \\
+\hspace{0.5in} {\bf bool isNucleus( const int \& );} \\
+\hspace{0.5in} {\bf bool isPentaquark( const int \& );} \\
+\hspace{0.5in} {\bf bool isSUSY( const int \& );} \\
+\hspace{0.5in} {\bf bool isRhadron( const int \& );} \\
+\hspace{0.5in} {\bf bool isDyon( const int \& );} \\
+\hspace{0.5in} {\bf bool isQBall( const int \& );} \\
+\hspace{1.0in} Is this a valid particle ID for the named particle type.  \\
+
+\hspace{0.5in} {\bf bool hasUp( const int \& );} \\
+\hspace{0.5in} {\bf bool hasDown( const int \& );} \\
+\hspace{0.5in} {\bf bool hasStrange( const int \& );} \\
+\hspace{0.5in} {\bf bool hasCharm( const int \& );} \\
+\hspace{0.5in} {\bf bool hasBottom( const int \& );} \\
+\hspace{0.5in} {\bf bool hasTop( const int \& );} \\
+\hspace{1.0in} Does this particle contain the named quark? \\
+
+\hspace{0.5in} {\bf int  jSpin( const int \& );} \\
+\hspace{1.0in}  Returns 2J+1, where J is the total spin. \\
+
+\hspace{0.5in} {\bf int  sSpin( const int \& );} \\
+\hspace{1.0in} Returns 2S+1, where S is the spin.  \\
+
+\hspace{0.5in} {\bf int  lSpin( const int \& );} \\
+\hspace{1.0in} Returns 2L+1, where L is the orbital angular momentum.  \\
+
+\hspace{0.5in} {\bf int threeCharge( const int \& );} \\
+\hspace{1.0in} Return 3 times the charge.  If this is a Q-ball, return 30 times the charge.  \\
+
+\hspace{0.5in} {\bf double charge( const int \& );} \\
+\hspace{1.0in} Return the actual charge.  \\
+
+\end{tabbing}
+
+\vfill\eject

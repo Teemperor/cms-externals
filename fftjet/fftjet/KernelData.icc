@@ -1,0 +1,16 @@
+#include <cassert>
+
+namespace fftjet {
+    template<typename Real, typename Complex>
+    KernelData<Real, Complex>::KernelData(
+        const Real* scan, const Complex* image,
+        const Real* norm, const double area)
+        : scan_(scan),
+          image_(image),
+          normalization_(norm),
+          scanArea_(area)
+    {
+        assert(scan_);
+        assert(image_);
+    }
+}

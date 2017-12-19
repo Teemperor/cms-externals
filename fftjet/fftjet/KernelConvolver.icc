@@ -1,0 +1,44 @@
+#include <cassert>
+#include <cmath>
+
+namespace fftjet {
+    template<typename Real, typename Complex>
+    KernelConvolver<Real, Complex>::KernelConvolver(
+        const AbsFFTEngine<Real,Complex>* fftEngine,
+        const AbsKernel2d* ikernel,
+        const unsigned minFixBin, const unsigned maxFixBin)
+        : AbsKernelConvolver<Real, Complex>(
+              fftEngine, minFixBin, maxFixBin),
+          kernel(ikernel)
+    {
+        assert(kernel);
+    }
+
+    template<typename Real, typename Complex>
+    KernelData<Real,Complex> KernelConvolver<Real, Complex>::buildKernelImage(
+        const double scale)
+    {
+        const AbsFFTEngine<Real,Complex>* const engine = 
+            AbsKernelConvolver<Real, Complex>::fftEngine;
+        const unsigned nEta = engine->nEta();
+        const unsigned nPhi = engine->nPhi();
+        const unsigned nbins = nEta*nPhi;
+
+        Real* tempBuffer = new Real[nbins];
+
+        // Note that the "scanFFT" function by default normalizes
+        // the scan in such a way that its area is 1. This is not
+        // what we need -- instead, we want the raw sum of values
+        // to be 1. Therefore, normalizedArea = sum*binArea = binArea.
+        const double binArea = 4.0*M_PI*M_PI/nbins;
+        const double area = kernel->scanFFT(tempBuffer, nEta, nPhi,
+                                            scale, binArea);
+        Complex* imageBuf = engine->allocateComplex();
+        assert(imageBuf);
+        engine->transformForward(tempBuffer, imageBuf);
+        Real* norm = 0;
+        if (AbsKernelConvolver<Real, Complex>::fixEfficiency)
+            norm = AbsKernelConvolver<Real, Complex>::buildEffNorm(tempBuffer);
+        return KernelData<Real,Complex>(tempBuffer, imageBuf, norm, area);
+    }
+}

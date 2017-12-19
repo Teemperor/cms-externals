@@ -1,0 +1,137 @@
+#include <cmath>
+#include <cassert>
+
+namespace fftjet {
+    template<class SparseTree>
+    inline double peakEtSplitTime(const SparseTree& tree,
+                                  const typename SparseTree::NodeId id,
+                                  const double minScale)
+    {
+        typedef typename SparseTree::cluster_type Cluster;
+        typedef typename SparseTree::NodeId NodeId;
+        typedef typename SparseTree::Node Node;
+
+        assert(id);
+        assert(minScale > 0.0);
+        const Node& myNode = tree.getNode(id);
+        const Cluster& myCluster = myNode.getCluster();
+        const double myScale = myCluster.scale();
+        assert(myScale > 0.0);
+        const unsigned nDaus = myNode.nDaus();
+
+        if (nDaus && myScale > minScale)
+        {
+            double firstDaugherFraction = 1.0;
+            if (nDaus > 1)
+            {
+                double et0 = 0.0, etSum = 0.0;
+                for (unsigned idau=0; idau<nDaus; ++idau)
+                {
+                    const NodeId dauId = myNode.daus()[idau];
+                    const Node& dauNode = tree.uncheckedNode(dauId);
+                    const Cluster& dauCluster = dauNode.getCluster();
+                    const double s = dauCluster.scale();
+                    const double et = s*s*dauCluster.magnitude();
+                    etSum += et;
+                    if (!idau)
+                        et0 = et;
+                }
+                assert(et0 > 0.0);
+                assert(etSum > 0.0);
+                firstDaugherFraction = et0/etSum;
+            }
+            const NodeId dauId = myNode.daus()[0];
+            const Node& dauNode = tree.uncheckedNode(dauId);
+            const Cluster& dauCluster = dauNode.getCluster();
+            const double dauScale = dauCluster.scale();
+            assert(myScale > dauScale);
+            double t;
+            if (dauScale > minScale)
+                t = log(myScale/dauScale)+peakEtSplitTime(tree, dauId, minScale);
+            else
+                t = log(myScale/minScale);
+            return firstDaugherFraction*t;
+        }
+        else
+            return log(myScale/minScale);
+    }
+
+    template<class SparseTree>
+    inline double peakEtMergeTime(const SparseTree& tree,
+                                  const typename SparseTree::NodeId id,
+                                  const double maxScale)
+    {
+        typedef typename SparseTree::cluster_type Cluster;
+        typedef typename SparseTree::NodeId NodeId;
+        typedef typename SparseTree::Node Node;
+
+        assert(id);
+        assert(maxScale > 0.0);
+        const Node& myNode = tree.getNode(id);
+        const Cluster& myCluster = myNode.getCluster();
+        const double myScale = myCluster.scale();
+        assert(myScale > 0.0);
+        const NodeId parentId = myNode.parent();
+
+        if (parentId && myScale < maxScale)
+        {
+            const Node& parentNode = tree.getNode(parentId);
+            const Cluster& parentCluster = parentNode.getCluster();
+            const double parentScale = parentCluster.scale();
+            assert(parentScale > myScale);
+            double t;
+            if (parentScale >= maxScale)
+                t = log(maxScale/myScale);
+            else
+            {
+                t = log(parentScale/myScale);
+                double myFraction = 1.0;
+                const unsigned nDaus = parentNode.nDaus();
+                if (nDaus > 1)
+                {
+                    double et0 = 0.0, etSum = 0.0;
+                    for (unsigned idau=0; idau<nDaus; ++idau)
+                    {
+                        const NodeId dauId = parentNode.daus()[idau];
+                        const Node& dauNode = tree.uncheckedNode(dauId);
+                        const Cluster& dauCluster = dauNode.getCluster();
+                        const double s = dauCluster.scale();
+                        const double et = s*s*dauCluster.magnitude();
+                        etSum += et;
+                        if (dauId == id)
+                            et0 = et;
+                    }
+                    assert(et0 > 0.0);
+                    assert(etSum > 0.0);
+                    myFraction = et0/etSum;
+                }
+                t += myFraction*peakEtMergeTime(tree, parentId, maxScale);
+            }
+            return t;
+        }
+        else
+            return log(maxScale/myScale);
+    }
+
+    template<class SparseTree>
+    inline void updateSplitMergeTimes(SparseTree& tree,
+                                      const double minScale,
+                                      const double maxScale)
+    {
+        typedef typename SparseTree::Node Node;
+        typedef typename SparseTree::cluster_type Cluster;
+
+        const unsigned sz = tree.size();
+        for (unsigned idx = 1U; idx < sz; ++idx)
+        {
+            Node& node(tree.uncheckedMutableNode(idx));
+            Cluster& clus(node.mutableCluster());
+
+            const double st = peakEtSplitTime(tree, idx, minScale);
+            clus.setSplitTime(st);
+
+            const double mt = peakEtMergeTime(tree, idx, maxScale);
+            clus.setMergeTime(mt);
+        }
+    }
+}

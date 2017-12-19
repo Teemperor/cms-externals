@@ -1,0 +1,44 @@
+#include <cmath>
+
+namespace fftjet {
+    inline SimplePeakSelector::SimplePeakSelector(
+        const double magCut,
+        const double driftSpeedCut, const double magSpeedCut,
+        const double lifeTimeCut, const double NNDCut,
+        const double etaCut, const double splitTimeCut,
+        const double mergeTimeCut)
+        : magCut_(magCut),
+          driftSpeedCut_(driftSpeedCut),
+          magSpeedCut_(magSpeedCut),
+          lifeTimeCut_(lifeTimeCut),
+          NNDCut_(NNDCut),
+          etaCut_(etaCut),
+          splitTimeCut_(splitTimeCut),
+          mergeTimeCut_(mergeTimeCut)
+    {
+    }
+
+    inline bool SimplePeakSelector::operator()(const Peak& peak) const
+    {
+        return peak.magnitude() > magCut_ &&
+               peak.driftSpeed() < driftSpeedCut_ &&
+               peak.magSpeed() > magSpeedCut_ &&
+               peak.lifetime() > lifeTimeCut_ &&
+               peak.nearestNeighborDistance() > NNDCut_ &&
+               fabs(peak.eta()) < etaCut_ &&
+               peak.splitTime() > splitTimeCut_ &&
+               peak.mergeTime() > mergeTimeCut_;
+    }
+
+    inline ScalePowerPeakSelector::ScalePowerPeakSelector(
+        const double a, const double p, const double b, const double etaCut)
+        : a_(a), p_(p), b_(b), etaCut_(etaCut)
+    {
+    }
+
+    inline bool ScalePowerPeakSelector::operator()(const Peak& peak) const
+    {
+        return peak.magnitude() > a_*pow(peak.scale(),p_) + b_ &&
+               fabs(peak.eta()) < etaCut_;
+    }
+}

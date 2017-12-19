@@ -1,0 +1,13 @@
+#! /bin/sh
+# @configure_input@
+
+rm -f testPID.out
+
+./testPID@EXEEXT@  >& testPID.out
+if ( !  `@DIFF_Q@ testPID.out @srcdir@/testPID.output > /dev/null` )
+then
+  echo "testPID.out and @srcdir@/testPID.output differ"
+  exit 1;
+fi
+
+exit 0;

@@ -1,0 +1,346 @@
+#include <cassert>
+#include <algorithm>
+
+namespace fftjet {
+    template<typename Real, typename Complex>
+    AbsSequentialConvolver<Real, Complex>::AbsSequentialConvolver(
+        const AbsFFTEngine<Real,Complex>* ietaEngine,
+        const AbsFFTEngine<Real,Complex>* iphiEngine,
+        const std::vector<double>& iphiScales,
+        const unsigned iminEtaBin, const unsigned imaxEtaBin,
+        const bool ifixEfficiency)
+        : etaEngine(ietaEngine),
+          phiEngine(iphiEngine),
+          phiScales(iphiScales),
+          minEtaBin(iminEtaBin),
+          maxEtaBin(imaxEtaBin),
+          fixEfficiency(ifixEfficiency),
+          haveData(false)
+    {
+        assert(etaEngine);
+        assert(etaEngine->nEta() == 1);
+        const unsigned nEta = etaEngine->nPhi();
+        assert(nEta);
+        assert(phiScales.size() == nEta);
+
+        assert(phiEngine);
+        assert(phiEngine->nEta() == 1);
+        assert(minEtaBin < maxEtaBin);
+
+        // Allocate image buffers for each eta bin
+        dataImages.reserve(nEta);
+        for (unsigned i=0; i<nEta; ++i)
+        {
+            assert(phiScales[i] > 0.0);
+            Complex* buf = phiEngine->allocateComplex();
+            assert(buf);
+            phiEngine->zeroOut(buf);
+            dataImages.push_back(buf);
+        }
+
+        // Allocate complex work buffer
+        if (nEta > phiEngine->nPhi())
+            complexBuffer = etaEngine->allocateComplex();
+        else
+            complexBuffer = phiEngine->allocateComplex();
+        assert(complexBuffer);
+
+        // Allocate real work buffer
+        workbuf = new Real[nEta];
+    }
+
+    template<typename Real, typename Complex>
+    AbsSequentialConvolver<Real, Complex>::~AbsSequentialConvolver()
+    {
+        // Deallocate real work buffer
+        delete [] workbuf;
+
+        // Deallocate complex work buffer
+        const unsigned nEtaBins = etaEngine->nPhi();
+        if (nEtaBins > phiEngine->nPhi())
+            etaEngine->destroyComplex(complexBuffer);
+        else
+            phiEngine->destroyComplex(complexBuffer);
+
+        // Clean up image buffers
+        const unsigned nbuf = dataImages.size();
+        for (unsigned i=0; i<nbuf; ++i)
+            phiEngine->destroyComplex(dataImages[i]);
+
+        // Clean up all eta kernel images
+        for (MapIterator it = kernelProperties.begin();
+             it != kernelProperties.end(); ++it)
+        {
+            const KernelData<Real,Complex>& etaData(
+                it->second.etaKernelData());
+            delete [] const_cast<Real*>(etaData.scan());
+            etaEngine->destroyComplex(const_cast<Complex*>(etaData.image()));
+            delete [] const_cast<Real*>(etaData.normalization());
+        }
+
+        // Clean up all phi kernel images
+        for (typename std::map<double, KernelData<Real,Complex> >::iterator it =
+                 uniquePhiKernels.begin(); it != uniquePhiKernels.end(); ++it)
+        {
+            delete [] const_cast<Real*>(it->second.scan());
+            phiEngine->destroyComplex(const_cast<Complex*>(it->second.image()));
+            delete [] const_cast<Real*>(it->second.normalization());
+        }
+    }
+
+    template<typename Real, typename Complex>
+    inline bool AbsSequentialConvolver<Real, Complex>::isScaleProcessed(
+        const double scale) const
+    {
+        return !(kernelProperties.find(scale) == kernelProperties.end());
+    }
+
+    template<typename Real, typename Complex>
+    void AbsSequentialConvolver<Real, Complex>::processScale(
+        const double scale)
+    {
+        if (kernelProperties.find(scale) == kernelProperties.end())
+        {
+            // Build the kernel image for convolutions in eta
+            SequentialKernelData<Real,Complex> seqData(
+                buildKernelImageEta(scale, etaEngine,
+                                    fixEfficiency ? minEtaBin : 0U,
+                                    fixEfficiency ? maxEtaBin : 0U));
+
+            // Build kernel images for convolutions in phi
+            const unsigned nEta = etaEngine->nPhi();
+            seqData.reserve(nEta);
+            for (unsigned i=0; i<nEta; ++i)
+            {
+                const double actualScale = scale*phiScales[i];
+
+                // Search for a phi kernel image with this scale
+                // and see whether we already have one
+                typename std::map<double, KernelData<Real,Complex> 
+                    >::const_iterator it = uniquePhiKernels.find(actualScale);
+                if (it == uniquePhiKernels.end())
+                {
+                    // Have to build a new kernel image
+                    KernelData<Real,Complex> ker(buildKernelImagePhi(
+                                                     actualScale, phiEngine));
+                    seqData.push_back(ker);
+                    uniquePhiKernels.insert(std::make_pair(actualScale, ker));
+                }
+                else
+                {
+                    // Can reuse an existing kernel image
+                    seqData.push_back(it->second);
+                }
+            }
+            kernelProperties.insert(std::make_pair(scale, seqData));
+        }
+    }
+
+    template<typename Real, typename Complex>
+    void AbsSequentialConvolver<Real, Complex>::setEventData(
+        const Real* data, const unsigned nEta, const unsigned nPhi)
+    {
+        assert(nEta == etaEngine->nPhi());
+        assert(nPhi == phiEngine->nPhi());
+
+        for (unsigned i=0; i<nEta; ++i)
+            if (i >= minEtaBin && i < maxEtaBin)
+                phiEngine->transformForward(data+i*nPhi, dataImages[i]);
+
+        haveData = true;
+    }
+
+    template<typename Real, typename Complex>
+    Real* AbsSequentialConvolver<Real, Complex>::buildEffNorm(
+        const Real* effBuf, const unsigned nEta) const
+    {
+        assert(nEta == etaEngine->nPhi());
+
+        // Allocate the memory for the normalization curve.
+        // The corresponding "delete" will be done in the destructor.
+        Real* norm = new Real[nEta];
+        for (unsigned ieta=0; ieta<nEta; ++ieta)
+            norm[ieta] = 0;
+
+        // Shift the kernel center to each bin between minFixBin
+        // and maxFixBin. Sum the shifted kernel values falling
+        // between minFixBin and maxFixBin. This summing is a little
+        // bit tricky because the kernel wraps around (the boundary
+        // in eta is also periodic).
+        for (unsigned ishift = minEtaBin;
+             ishift < maxEtaBin && ishift < nEta; ++ishift)
+        {
+            long double sum = 0.0L;
+            for (unsigned ieta=0; ieta<nEta; ++ieta)
+            {
+                const unsigned idx = (ishift + ieta) % nEta;
+                if (idx >= minEtaBin && idx < maxEtaBin)
+                    sum += effBuf[ieta];
+            }
+            assert(sum > 0.0L);
+            norm[ishift] = 1.0L/sum;
+        }
+
+        return norm;
+    }
+
+    template<typename Real, typename Complex>
+    void AbsSequentialConvolver<Real, Complex>::convolveWithKernel(
+        const double scale, Real* result,
+        const unsigned nEta, const unsigned nPhi)
+    {
+        assert(nEta == etaEngine->nPhi());
+        assert(nPhi == phiEngine->nPhi());
+
+        // Check that the "setEventData" function was called
+        // at least once prior to this
+        assert(haveData);
+
+        // Find or build the kernel image appropriate for this scale
+        MapIterator it = kernelProperties.find(scale);
+        if (it == kernelProperties.end())
+        {
+            processScale(scale);
+            it = kernelProperties.find(scale);
+            assert(!(it == kernelProperties.end()));
+        }
+
+        // Perform phi convolutions along phi in each eta bin
+        for (unsigned ieta=0; ieta<nEta; ++ieta)
+            if (ieta >= minEtaBin && ieta < maxEtaBin)
+            {
+                phiEngine->multiplyTransforms(it->second[ieta].image(),
+                                              dataImages[ieta], complexBuffer);
+                phiEngine->transformBack(complexBuffer, result+ieta*nPhi);
+            }
+            else
+            {
+                Real* r = result + ieta*nPhi;
+                for (unsigned iphi=0; iphi<nPhi; ++iphi)
+                    r[iphi] = 0;
+            }
+
+        // Perform eta convolutions along eta in each phi bin
+        const Complex* etaKernelImage = it->second.etaKernelData().image();
+        for (unsigned iphi=0; iphi<nPhi; ++iphi)
+        {
+            for (unsigned ieta=0; ieta<nEta; ++ieta)
+                workbuf[ieta] = result[ieta*nPhi + iphi];
+            etaEngine->transformForward(workbuf, complexBuffer);
+            etaEngine->multiplyTransforms(complexBuffer, etaKernelImage,
+                                          complexBuffer);
+            etaEngine->transformBack(complexBuffer, workbuf);
+            for (unsigned ieta=0; ieta<nEta; ++ieta)
+                result[ieta*nPhi + iphi] = workbuf[ieta];
+        }
+    }
+
+    template<typename Real, typename Complex>
+    inline unsigned
+    AbsSequentialConvolver<Real, Complex>::nProcessedScales() const
+    {
+        return kernelProperties.size();
+    }
+
+    template<typename Real, typename Complex>
+    void AbsSequentialConvolver<Real, Complex>::getProcessedScales(
+        std::vector<double>* scales) const
+    {
+        assert(scales);
+        scales->clear();
+        scales->reserve(kernelProperties.size());
+        for (ConstMapIterator it = kernelProperties.begin();
+             it != kernelProperties.end(); ++it)
+            scales->push_back(it->first);
+        std::sort(scales->begin(), scales->end(), std::greater<double>());
+    }
+
+    template<typename Real, typename Complex>
+    const SequentialKernelData<Real,Complex>* 
+    AbsSequentialConvolver<Real, Complex>::getKernelData(
+        const double scale) const
+    {
+        ConstMapIterator it = kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return &it->second;
+        else
+            return 0;
+    }
+
+    template<typename Real, typename Complex>
+    const Real* AbsSequentialConvolver<Real, Complex>::getKernelScanPhi(
+        const double scale, const unsigned etaBin) const
+    {
+        ConstMapIterator it = kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.at(etaBin).scan();
+        else
+            return 0;
+    }
+
+    template<typename Real, typename Complex>
+    const Complex* AbsSequentialConvolver<Real, Complex>::getKernelImagePhi(
+        const double scale, const unsigned etaBin) const
+    {
+        ConstMapIterator it = kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.at(etaBin).image();
+        else
+            return 0;
+    }
+
+    template<typename Real, typename Complex>
+    const Real* AbsSequentialConvolver<Real, Complex>::getNormalization(
+        const double scale) const
+    {
+        ConstMapIterator it = kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.etaKernelData().normalization();
+        else
+            return 0;
+    }
+
+    template<typename Real, typename Complex>
+    double AbsSequentialConvolver<Real, Complex>::getScanAreaPhi(
+        const double scale, const unsigned etaBin) const
+    {
+        ConstMapIterator it = kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.at(etaBin).fftScanArea();
+        else
+            return 0.0;
+    }
+
+    template<typename Real, typename Complex>
+    const Real* AbsSequentialConvolver<Real, Complex>::getKernelScanEta(
+        const double scale) const
+    {
+        ConstMapIterator it = kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.etaKernelData().scan();
+        else
+            return 0;
+    }
+
+    template<typename Real, typename Complex>
+    const Complex* AbsSequentialConvolver<Real, Complex>::getKernelImageEta(
+        const double scale) const
+    {
+        ConstMapIterator it = kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.etaKernelData().image();
+        else
+            return 0;
+    }
+
+    template<typename Real, typename Complex>
+    double AbsSequentialConvolver<Real, Complex>::getScanAreaEta(
+        const double scale) const
+    {
+        ConstMapIterator it = kernelProperties.find(scale);
+        if (it != kernelProperties.end())
+            return it->second.etaKernelData().fftScanArea();
+        else
+            return 0.0;
+    }
+}

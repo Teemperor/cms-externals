@@ -1,0 +1,127 @@
+\section { Handling Unknown Particle ID's }
+\label{unknownID}
+
+\subsection { Abstract Base Class }
+
+The arguments for processUnknownID() must be set so that any
+inheriting class has all necessary information. 
+We pass a const reference to the ParticleDataTable instance.  
+
+\begin{verbatim}
+namespace HepPDT {
+
+// forward declaration to avoid circular dependencies
+class ParticleDataTable;
+
+class ProcessUnknownID  {
+ 
+public:
+
+  /// safety wrapper to avoid secondary calls to processUnknownID
+  ParticleData  * callProcessUnknownID( ParticleID, const ParticleDataTable & );
+
+  /// allow cleanup by ParticleDataTable
+  virtual ~ProcessUnknownID( ) {}
+
+
+protected:
+  ProcessUnknownID( ) : alreadyHere(false) {}
+
+private: 
+
+  bool    alreadyHere;
+  virtual ParticleData  * processUnknownID( ParticleID, 
+                                            const ParticleDataTable & ) = 0;
+
+};  // ProcessUnknownID
+
+}       // HepPDT
+\end{verbatim}
+
+
+\subsection { SimpleProcessUnknownID }
+
+This is the default implementation of processUnknownID().
+Notice that it simply returns a null pointer.
+
+\begin{verbatim}
+namespace HepPDT {
+
+class SimpleProcessUnknownID : public ProcessUnknownID {
+public:
+  SimpleProcessUnknownID() {}
+
+  virtual ParticleData  * processUnknownID
+                      ( ParticleID key, const ParticleDataTable & pdt )
+    { return 0; }
+    
+};
+
+}       // HepPDT
+\end{verbatim}
+
+
+\subsection { HeavyIonUnknownID }
+
+HeavyIonUnknownID creates and returns a pointer to a ParticleData.
+This processUnknownID method only uses the proton mass to calculate
+an approximate mass for the nuclear fragment.
+
+\begin{verbatim}
+// HeavyIonUnknownID.hh
+namespace HepPDT {
+
+class HeavyIonUnknownID : public ProcessUnknownID {
+public:
+  HeavyIonUnknownID() {}
+
+  virtual ParticleData  * processUnknownID( ParticleID,  const ParticleDataTable & pdt );
+    
+};
+
+}       // HepPDT
+
+\end{verbatim}
+
+\begin{verbatim}
+// HeavyIonUnknownID.cc
+namespace HepPDT {
+
+ParticleData * HeavyIonUnknownID::processUnknownID
+              ( ParticleID key, const ParticleDataTable & pdt ) 
+{ 
+    if( ! key.isNucleus() ) return 0;
+     
+    // have to create a TempParticleData with all properties first
+    TempParticleData tpd(key);
+    // calculate approximate mass
+    // WARNING: any calls to particle() from here MUST reference 
+    //          a ParticleData which is already in the table
+    // This convention is enforced.
+    const ParticleData * proton = pdt.particle(2212);
+    if( ! proton ) return 0;
+    double protonMass = proton->mass();
+    tpd.tempMass = Measurement(key.A()*protonMass, 0.);
+    return new ParticleData(tpd);
+}
+
+}       // HepPDT
+
+\end{verbatim}
+
+
+\subsection { Using MyProcessUnknownID }
+
+To use HeavyIonUnknownID, you simply need to specify it when you
+create your ParticleDataTable object: 
+\begin{verbatim}
+#include "HepPDT/HeavyIonUnknownID.hh"
+...
+HepPDT::ParticleDataTable pdt( "Handle Heavy Ions", 
+                                new HepPDT::HeavyIonUnknownID );
+\end{verbatim}
+
+You may also create your own method and call it in the same way.
+
+
+\vfill\eject

@@ -1,0 +1,64 @@
+README need to be updated.
+
+This directory contains examples of TauSpinner use.
+They are intended to present different options of TauSpinner
+and as a starting point for user analysis.
+
+###############
+# Compilation #
+###############
+
+- If using LCG scripts, check if Tauola++ was compiled with TauSpinner library
+  If using default scripts, execute ./configure providing paths to HepMC
+  (and optionally to MC-TESTER)
+- Make sure that ROOT configuration is available through 'root-config' and
+  that the lhapdf has correct path for datasets
+- Check that the dataset MSTW2008nnlo90cl.LHgrid exists
+- Execute 'make'
+- NOTE: whenever a change to TauSpinner libraries is made, remember
+        to 'make' and 'make move' in TauSpinner main directory
+
+########################
+# Running the examples #
+########################
+
+NOTE: As described in the paper, examples are prepared to work with input
+      files in HepMC::IO_GenEvent format but can easily be adapted to any
+      other input format.
+
+1)
+Executing ./tau-reweight-test.exe will run the test on the sample 'events.dat'
+provided with the distribution. The output should show:
+
+No of events processed for spin weight: 100
+WT average for these events: 1.11409
+
+To test the default setup with any other sample, execute:
+
+./tau-reweight-test.exe <input_file>
+
+2)
+To run the second example, go to CLEO-to-RCHL directory and execute:
+
+./tau-reweight-CLEO-to-RChL.exe <input_file> [<events_limit>]
+
+If no events limit is provided, all events from the file will be analyzed.
+
+Note that decay channels that Tauola++ does not have new currents implemented,
+the resulting weight will be 1.0
+
+3)
+To run the VBF example, go to example-VBF directory and execute:
+
+./example-VBF.exe <input_file> [<events_limit>]
+
+A small datafile 'events-VBF.dat' has been provided and can be used
+to test the installation.
+
+In these examples, weights resulting from TauSpinner processing are used only
+in an MC-TESTER analysis. If MC-TESTER is used, an output file mc-tester.root
+will be produced with the distributions after reweighting. It can be compared
+with results before reweighting to show the differences.
+
+--
+Last modified: T. Przedzinski 11.VI.2017
